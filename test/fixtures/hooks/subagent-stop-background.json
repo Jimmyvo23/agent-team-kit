@@ -1,0 +1,24 @@
+{
+  "session_id": "33181571-2930-4aad-859a-baa3655cfa3c",
+  "transcript_path": "/home/dev/.claude/projects/-home-dev-project/33181571-2930-4aad-859a-baa3655cfa3c.jsonl",
+  "cwd": "/home/dev/project",
+  "scratchpad_dir": "/home/dev/.claude/tmp/project/33181571-2930-4aad-859a-baa3655cfa3c/scratchpad",
+  "prompt_id": "98a5a8e7-4ab4-4b67-86a3-1ffcab61ac84",
+  "permission_mode": "acceptEdits",
+  "agent_id": "a83fd226b7b41a0d9",
+  "agent_type": "spike-helper",
+  "hook_event_name": "SubagentStop",
+  "stop_hook_active": false,
+  "agent_transcript_path": "/home/dev/.claude/projects/-home-dev-project/33181571-2930-4aad-859a-baa3655cfa3c/subagents/agent-a83fd226b7b41a0d9.jsonl",
+  "last_assistant_message": "Created bg.txt containing 'b' and ran echo hi, which printed \"hi\".",
+  "background_tasks": [
+    {
+      "id": "a83fd226b7b41a0d9",
+      "type": "subagent",
+      "status": "running",
+      "description": "Create bg.txt with 'b' and run echo hi",
+      "agent_type": "spike-helper"
+    }
+  ],
+  "session_crons": []
+}
