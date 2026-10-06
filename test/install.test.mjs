@@ -65,7 +65,8 @@ function snapshot(dir = target) {
       const full = path.join(d, ent.name);
       const rel = path.relative(dir, full).split(path.sep).join('/');
       if (rel === '.git') continue;
-      if (ent.isDirectory()) walk(full);
+      if (ent.isSymbolicLink()) out[rel] = `symlink -> ${fs.readlinkSync(full)}`;
+      else if (ent.isDirectory()) walk(full);
       else out[rel] = fs.readFileSync(full, 'utf8');
     }
   };
@@ -499,21 +500,77 @@ describe('fix round 1: safety', () => {
     expect(fs.existsSync(evil)).toBe(false);
   });
 
-  test('a symlinked .claude directory is never written through', async () => {
-    const elsewhere = path.join(root, 'elsewhere');
-    fs.mkdirSync(elsewhere);
-    fs.symlinkSync(elsewhere, p('.claude'));
-    const r = await install();
-    expect(r.code).toBe(0);
-    expect(fs.readdirSync(elsewhere)).toEqual([]);
-    expect(exists('.team/planner.md')).toBe(true);
-  });
-
   test('uninstall says events.jsonl was kept and is no longer git-ignored', async () => {
     await install();
     write('.team/events.jsonl', '{}\n');
     const r = await uninstall();
     expect(r.out).toMatch(/\.team\/events\.jsonl.*no longer git-ignored/);
     expect(exists('.team/events.jsonl')).toBe(true);
+  });
+});
+
+describe('fix round 2: refusals and path guards', () => {
+  for (const rel of ['.team', '.team/bin', '.team/kit-manifest.json', '.claude', '.claude/settings.json']) {
+    test(`a symlinked ${rel} refuses the whole install and changes nothing`, async () => {
+      const elsewhere = path.join(root, 'elsewhere');
+      fs.mkdirSync(elsewhere);
+      fs.mkdirSync(path.dirname(p(rel)), { recursive: true });
+      fs.symlinkSync(rel.endsWith('.json') ? path.join(elsewhere, 'x.json') : elsewhere, p(rel));
+      const before = snapshot();
+      const r = await install();
+      expect(r.code).toBe(1);
+      expect(r.err).toMatch(/symlink/);
+      expect(r.err).toContain(rel);
+      expect(snapshot()).toEqual(before);
+      expect(fs.readdirSync(elsewhere)).toEqual([]);
+      expect(() => planInstall({ kitDir: KIT, targetDir: target })).toThrow(/symlink/);
+    });
+  }
+
+  test('applyChanges refuses paths outside the target and writes nothing', () => {
+    const outside = path.join(root, 'out side');
+    fs.mkdirSync(outside);
+    fs.writeFileSync(path.join(outside, 'victim.txt'), 'keep me');
+    const bad = [
+      [{ path: '../out side/victim.txt', action: 'delete' }],
+      [{ path: '../out side/victim.txt', action: 'update', content: 'x' }],
+      [{ path: path.join(outside, 'victim.txt'), action: 'delete' }],
+      [{ path: 'a/../../out side/victim.txt', action: 'delete' }],
+      [{ path: 'ok.txt', action: 'create', content: 'x' }, { path: '../out side/victim.txt', action: 'delete' }],
+    ];
+    for (const changes of bad) {
+      expect(() => applyChanges(changes, { targetDir: target, resolveConflict: () => true })).toThrow(/outside/);
+    }
+    expect(fs.readFileSync(path.join(outside, 'victim.txt'), 'utf8')).toBe('keep me');
+    expect(exists('ok.txt')).toBe(false);
+    expect(() => applyChanges([{ path: '.team/kit-manifest.json', action: 'delete', pruneDirs: ['../out side'] }],
+      { targetDir: target, resolveConflict: () => true })).toThrow(/outside/);
+  });
+
+  test('a symlinked CLAUDE.md is a conflict only when a change is needed', async () => {
+    write('AGENTS.md', '# Agents\n');
+    fs.symlinkSync('AGENTS.md', p('CLAUDE.md'));
+    let r = await uninstall();
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/Nothing to do/);
+
+    const plan = planInstall({ kitDir: KIT, targetDir: target });
+    expect(plan.find((c) => c.path === 'CLAUDE.md')).toMatchObject({ action: 'conflict', reason: 'is a symlink' });
+    await install();
+    expect(read('AGENTS.md')).toBe('# Agents\n');
+
+    // The user adds the block themselves: now nothing is needed on install.
+    write('AGENTS.md', `# Agents\n\n<!-- agent-team-kit:start -->\n${fs.readFileSync(path.join(KIT, 'templates/claude-team-section.md'), 'utf8').trimEnd()}\n<!-- agent-team-kit:end -->\n`);
+    expect(planInstall({ kitDir: KIT, targetDir: target }).find((c) => c.path === 'CLAUDE.md').action).toBe('unchanged');
+    r = await cli(['--target', target]);
+    expect(r.out).toMatch(/Nothing to do/);
+    expect(planUninstall({ targetDir: target }).find((c) => c.path === 'CLAUDE.md')).toMatchObject({ action: 'conflict', symlink: true });
+  });
+
+  test('a symlinked .gitignore that needs no change is unchanged', async () => {
+    write('shared-ignore', 'node_modules/\n');
+    fs.symlinkSync('shared-ignore', p('.gitignore'));
+    expect((await uninstall()).out).toMatch(/Nothing to do/);
+    expect(planInstall({ kitDir: KIT, targetDir: target }).find((c) => c.path === '.gitignore').action).toBe('conflict');
   });
 });
