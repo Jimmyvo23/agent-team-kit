@@ -2,6 +2,8 @@ import { test, expect } from 'vitest';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawn } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
 import {
   EVENT_TYPES, AGENT_STATUSES, TASK_STATES, APPROVAL_STATES,
   validateEvent, appendEvent, readEvents,
@@ -150,31 +152,31 @@ test('missing file reads as empty', () => {
 test('malformed complete line is skipped with a warning', () => {
   const p = tmpLog();
   fs.mkdirSync(path.dirname(p), { recursive: true });
-  fs.writeFileSync(p, '{"type":"agent_start","agent":"a","source":"hook","time":"t"}\nnot json\n');
+  fs.writeFileSync(p, '{"type":"agent_start","agent":"a","source":"hook","time":"2026-10-05T10:00:00.000Z"}\nnot json\n');
   const r = readEvents(p);
   expect(r.events).toHaveLength(1);
   expect(r.warnings).toHaveLength(1);
 });
 
-test('complete line that is valid JSON but not an object/valid event is skipped with a warning', () => {
+test('complete line that is valid JSON but not an object/valid event is skipped with a warning; empty lines silently', () => {
   const p = tmpLog();
   fs.mkdirSync(path.dirname(p), { recursive: true });
   fs.writeFileSync(p, '[1]\n{"type":"nope","source":"cli"}\n\n');
   const r = readEvents(p);
   expect(r.events).toHaveLength(0);
-  expect(r.warnings).toHaveLength(3); // array, unknown type, empty line
+  expect(r.warnings).toHaveLength(2); // array, unknown type (empty line is silent)
 });
 
 test('trailing line without newline is ignored silently (write in progress)', () => {
   const p = tmpLog();
   fs.mkdirSync(path.dirname(p), { recursive: true });
-  fs.writeFileSync(p, '{"type":"agent_start","agent":"a","source":"hook","time":"t"}\n{"type":"agent_st');
+  fs.writeFileSync(p, '{"type":"agent_start","agent":"a","source":"hook","time":"2026-10-05T10:00:00.000Z"}\n{"type":"agent_st');
   const r = readEvents(p);
   expect(r.events).toHaveLength(1);
   expect(r.warnings).toHaveLength(0);
 });
 
-test('interleaved complete lines from many appends all parse', () => {
+test('many sequential appends all parse', () => {
   const p = tmpLog();
   for (let i = 0; i < 50; i++) appendEvent(p, { type: 'tool_use', agent: `a${i}`, action: 'Edit', source: 'hook' });
   const r = readEvents(p);
@@ -187,4 +189,39 @@ test('works in a directory with spaces', () => {
   appendEvent(p, { type: 'agent_start', agent: 'a', source: 'hook' });
   expect(readEvents(p).events).toHaveLength(1);
   expect(p).toContain('Claude projects');
+});
+
+test('concurrent processes appending to one log all land as parseable lines', async () => {
+  const p = tmpLog('Claude projects', 'concurrent');
+  const mod = pathToFileURL(path.resolve('lib/events.mjs')).href;
+  const script = `import(${JSON.stringify(mod)}).then(({appendEvent})=>{
+    for (let i=0;i<50;i++) appendEvent(process.argv[1],{type:'tool_use',agent:'p'+process.argv[2],action:'Edit '+'x'.repeat(2000),source:'hook'});
+  })`;
+  const run = (n) => new Promise((resolve, reject) => {
+    const c = spawn(process.execPath, ['-e', script, p, String(n)], { stdio: 'inherit' });
+    c.on('error', reject);
+    c.on('exit', (code) => (code === 0 ? resolve() : reject(new Error(`child ${n} exited ${code}`))));
+  });
+  await Promise.all([0, 1, 2, 3].map(run));
+  const r = readEvents(p);
+  expect(r.warnings).toEqual([]);
+  expect(r.events).toHaveLength(200);
+}, 30000);
+
+test('append after a crashed writer fragment keeps the new event intact', () => {
+  const p = tmpLog();
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  fs.writeFileSync(p, '{"type":"agent_st');
+  appendEvent(p, { type: 'agent_start', agent: 'a', source: 'hook' });
+  const r = readEvents(p);
+  expect(r.events).toHaveLength(1);
+  expect(r.events[0].agent).toBe('a');
+  expect(r.warnings).toHaveLength(1);
+});
+
+test('time, when present, must be a parseable date string', () => {
+  expect(ok({ type: 'agent_start', agent: 'a', time: '2026-10-05T10:00:00.000Z' })).toBe(true);
+  expect(ok({ type: 'agent_start', agent: 'a', time: 'yesterday-ish' })).toBe(false);
+  expect(ok({ type: 'agent_start', agent: 'a', time: 12345 })).toBe(false);
+  expect(() => appendEvent(tmpLog(), { type: 'agent_start', agent: 'a', source: 'hook', time: 'nope' })).toThrow(/time/);
 });
