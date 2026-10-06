@@ -168,3 +168,40 @@ test('snapshot round-trip equals the original', () => {
   const snap = { type: 'snapshot', source: 'cli', time: new Date(T0).toISOString(), state: JSON.parse(JSON.stringify(foldEvents(events, team))) };
   expect(buildState([snap], team, now)).toEqual(buildState(events, team, now));
 });
+
+test('snapshot with missing fields does not break later events', () => {
+  const s = build([ev('snapshot', { state: {} }), ev('agent_start', { agent: 'backend' }), ev('tool_use', { agent: 'backend', action: 'x' })]);
+  expect(agent(s, 'backend').status).toBe('working');
+  expect(s.log).toHaveLength(2);
+});
+
+test('approver updatedAt is the latest approval request or decision', () => {
+  expect(agent(build([]), 'jimmy').updatedAt).toBeNull();
+  const req = ev('approval_requested', { id: 'WO-1', summary: 'S' });
+  expect(agent(build([req]), 'jimmy').updatedAt).toBe(req.time);
+  const dec = ev('approval_decided', { id: 'WO-1', state: 'approved' });
+  expect(agent(build([req, dec]), 'jimmy').updatedAt).toBe(dec.time);
+});
+
+test('approval does not move a blocked agent to awaiting_approval', () => {
+  const s = build([ev('status', { agent: 'backend', status: 'blocked', reason: 'Stuck' }), ev('approval_requested', { id: 'WO-1', summary: 'S', agents: ['backend'] })]);
+  expect(agent(s, 'backend').status).toBe('blocked');
+  expect(s.needsYou.map((n) => n.kind)).toEqual(['approval', 'blocked']);
+});
+
+test('agent stays awaiting while another pending approval lists it', () => {
+  const a = ev('approval_requested', { id: 'WO-1', summary: 'A', agents: ['backend'] });
+  const b = ev('approval_requested', { id: 'WO-2', summary: 'B', agents: ['backend'] });
+  const s1 = build([a, b, ev('approval_decided', { id: 'WO-1', state: 'approved' })]);
+  expect(agent(s1, 'backend').status).toBe('awaiting_approval');
+  const s2 = build([a, b, ev('approval_decided', { id: 'WO-1', state: 'approved' }), ev('approval_decided', { id: 'WO-2', state: 'approved' })]);
+  expect(agent(s2, 'backend').status).toBe('idle');
+});
+
+test('task and escalation events without agent are attributed to planner', () => {
+  const t = ev('task', { id: 'T-1', title: 't', owner: 'backend', state: 'todo' });
+  const e = ev('escalation', { task: 'T-1', summary: 'Help' });
+  const s = build([t, e]);
+  expect(s.agentLogs.planner).toHaveLength(2);
+  expect(agent(s, 'planner').updatedAt).toBe(e.time);
+});
