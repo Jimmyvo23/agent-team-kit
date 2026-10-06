@@ -4,16 +4,20 @@
   "private": true,
   "type": "module",
   "description": "Installs a five-role Claude Code team plus a local office dashboard into a project.",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "lint": "eslint .",
     "test": "vitest run",
     "test:e2e": "playwright test"
   },
   "devDependencies": {
+    "@eslint/js": "^9.39.5",
     "@playwright/test": "^1.50.0",
     "@vitejs/plugin-react": "^4.3.4",
     "eslint": "^9.0.0",
+    "globals": "^17.13.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "tailwindcss": "^4.0.0",
