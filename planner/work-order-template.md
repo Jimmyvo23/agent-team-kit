@@ -13,4 +13,4 @@ Tasks: <T-ids>
 <What this Work Order deliberately does not cover.>
 
 ## Decision
-Ask Jimmy per agent: Approve, Reject or Approve with changes. Record each answer with `team-status decide`.
+Ask Jimmy per agent: Approve, Reject or Approve with changes. Record each answer with `team-status decide`, one approval id per agent (for example `<WO-id>-backend`).

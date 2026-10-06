@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const read = (p) => fs.readFileSync(path.join(root, p), 'utf8');
+const MAX_AGENT_FILE_LINES = 80;
 const AGENTS = ['backend', 'frontend', 'tester', 'reviewer'];
 
 /** Tiny frontmatter parser: `key: value` lines between --- fences. */
@@ -67,7 +68,7 @@ describe('agent files', () => {
       const { body } = agent(id);
       const heads = [...body.matchAll(/^## (.+)$/gm)].map((m) => m[1].trim());
       expect(heads).toEqual(order);
-      expect(body.split('\n').length + 5).toBeLessThan(80);
+      expect(body.split('\n').length + 5).toBeLessThan(MAX_AGENT_FILE_LINES);
     }
   });
 
@@ -99,6 +100,17 @@ describe('agent files', () => {
     expect(agent('reviewer').body).toContain('superpowers:requesting-code-review');
   });
 
+  test('tester hands failures back to the builder; reviewer never approves via gh', () => {
+    expect(agent('tester').body).toMatch(/--to <builder id>/);
+    expect(agent('reviewer').body).toMatch(/gh pr review --comment/);
+    expect(agent('reviewer').body).toMatch(/Never use `--approve`/);
+    expect(agent('reviewer').body).toMatch(/--file \.team\/handoffs/);
+  });
+
+  test('every agent waits for approval before starting', () => {
+    for (const id of AGENTS) expect(agent(id).body).toMatch(/Do not start before the Planner confirms Jimmy approved/);
+  });
+
   test('tester limits edits to test files; reviewer is read-only', () => {
     expect(agent('tester').body).toMatch(/only (create or edit )?test files/i);
     expect(agent('reviewer').body).toMatch(/read-only/i);
@@ -119,6 +131,12 @@ describe('planner files', () => {
     expect(planner).toContain('.team/work-order-template.md');
     expect(planner).toContain('.team/handoffs/');
     expect(planner.split('\n').length).toBeLessThan(150);
+  });
+
+  test('planner uses one approval id per agent', () => {
+    expect(planner).toMatch(/approval --id WO-3-backend .*--agents backend\b/);
+    expect(planner).toMatch(/decide --id WO-3-backend/);
+    expect(planner).toContain('--agent planner');
   });
 
   test('planner names its skills', () => {

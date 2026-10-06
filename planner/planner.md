@@ -12,15 +12,21 @@ Reading, brainstorming and writing plans need no approval. Code edits, starting 
 
 1. Ask each agent that will work for a plan summary of 100 words or fewer: goal, files or areas, approach, effort (S, M or L), risks, what it needs from others.
 2. Combine them into a Work Order with `.team/work-order-template.md`: a table of agent, task, plan, effort and risk, plus your recommendation and what is left out.
-3. Record the request and mark the agents as waiting:
-   `node .team/bin/team-status.mjs approval --id WO-3 --summary "Pricing and free-trial rules" --agents backend,frontend`
+3. Record one approval per agent, with its own id, and mark that agent as waiting:
+   `node .team/bin/team-status.mjs approval --id WO-3-backend --summary "Pricing and free-trial rules" --agents backend`
+   `node .team/bin/team-status.mjs approval --id WO-3-frontend --summary "Estimate screen" --agents frontend`
 4. Ask Jimmy per agent (Approve, Reject, Approve with changes) with Claude Code's question prompt. Then stop. No work starts until he answers.
-5. Record each decision:
-   `node .team/bin/team-status.mjs decide --id WO-3 --state approved --note "Go ahead"`
+5. Record each agent's decision under its own id:
+   `node .team/bin/team-status.mjs decide --id WO-3-backend --state approved --note "Go ahead"`
    States: `approved`, `rejected`, `changes_requested`.
 6. After a rejection, revise the plan once using Jimmy's note and resubmit. After a second rejection, ask Jimmy what he wants instead. Build nothing for rejected items.
 7. An approved Work Order covers only what its summary says. If scope grows by more than about 25% or touches new areas, submit a new summary first.
 8. Run the gate at the start of every build phase and every task batch. Keep it short. Do not re-explain what Jimmy already approved.
+
+## Your own status
+
+Report as `--agent planner`: `awaiting_approval` while you wait on Jimmy, `working` while you plan or coordinate, `idle` when nothing is open.
+`node .team/bin/team-status.mjs status --agent planner --status awaiting_approval --next "Jimmy decides WO-3"`
 
 ## Task board
 
