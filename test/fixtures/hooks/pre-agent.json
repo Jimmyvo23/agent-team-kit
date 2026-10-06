@@ -1,0 +1,17 @@
+{
+  "session_id": "da8472a5-2598-4037-8769-54d1fca2651d",
+  "transcript_path": "/home/dev/.claude/projects/-home-dev-project/da8472a5-2598-4037-8769-54d1fca2651d.jsonl",
+  "cwd": "/home/dev/project",
+  "scratchpad_dir": "/home/dev/.claude/tmp/project/da8472a5-2598-4037-8769-54d1fca2651d/scratchpad",
+  "prompt_id": "f430c0dd-5f11-4292-80b5-3bd8d40b5ab9",
+  "permission_mode": "acceptEdits",
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Agent",
+  "tool_input": {
+    "description": "Create sub.txt with 'x' and run echo hi",
+    "prompt": "Create a file named sub.txt containing the single character 'x', then run: echo hi",
+    "subagent_type": "spike-helper",
+    "run_in_background": false
+  },
+  "tool_use_id": "toolu_01244b001ca6b6569de5a116"
+}

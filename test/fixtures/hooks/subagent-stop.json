@@ -1,0 +1,16 @@
+{
+  "session_id": "da8472a5-2598-4037-8769-54d1fca2651d",
+  "transcript_path": "/home/dev/.claude/projects/-home-dev-project/da8472a5-2598-4037-8769-54d1fca2651d.jsonl",
+  "cwd": "/home/dev/project",
+  "scratchpad_dir": "/home/dev/.claude/tmp/project/da8472a5-2598-4037-8769-54d1fca2651d/scratchpad",
+  "prompt_id": "f430c0dd-5f11-4292-80b5-3bd8d40b5ab9",
+  "permission_mode": "acceptEdits",
+  "agent_id": "ab987a012cccf3daa",
+  "agent_type": "spike-helper",
+  "hook_event_name": "SubagentStop",
+  "stop_hook_active": false,
+  "agent_transcript_path": "/home/dev/.claude/projects/-home-dev-project/da8472a5-2598-4037-8769-54d1fca2651d/subagents/agent-ab987a012cccf3daa.jsonl",
+  "last_assistant_message": "Done. Created sub.txt with 'x' in /home/dev/project/sub.txt, and echo hi output \"hi\".",
+  "background_tasks": [],
+  "session_crons": []
+}
