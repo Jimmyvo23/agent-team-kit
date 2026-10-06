@@ -3,7 +3,8 @@
 // Claude Code hook recorder. Usage: node record.mjs <agent-start|agent-stop|tool>
 // Reads the hook input JSON on stdin and appends one event to <project>/.team/events.jsonl.
 // Contract: print NOTHING (stdout may reach Claude's context) and ALWAYS exit 0.
-import { pathToFileURL } from 'node:url';
+import fs from 'node:fs';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 /** @param {unknown} v */
 const str = (v) => (typeof v === 'string' ? v : '');
@@ -28,16 +29,24 @@ export function mapHookInput(kind, input) {
     const base = str(ti.file_path).split(/[\\/]/).filter(Boolean).pop();
     if (base) action = `Editing ${base}`;
   } else if (input.tool_name === 'Bash') {
-    const words = str(ti.command).trim().split(/\s+/).filter(Boolean).slice(0, 2).join(' ');
-    if (words) action = `Running ${words}`;
+    // Skip leading VAR=value words; add a second word only if it cannot carry a secret (no '=', no leading '-').
+    const words = str(ti.command).trim().split(/\s+/).filter(Boolean);
+    while (words.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0])) words.shift();
+    if (words.length) {
+      const next = words[1];
+      const sub = next && !next.includes('=') && !next.startsWith('-') ? ` ${next}` : '';
+      action = `Running ${words[0]}${sub}`;
+    }
   }
   if (!action) return null;
+  if (action.length > 120) action = `${action.slice(0, 119)}\u2026`;
 
   // Subagent -> its type; main session (no agent_id) -> planner; unknown instance -> team.
   const agent = type || (input.agent_id ? 'team' : 'planner');
   return { type: 'tool_use', agent, action, source: 'hook' };
 }
 
+// Reads stdin to EOF: Claude Code closes it; a manual run from a TTY waits for Ctrl-D.
 /** @returns {Promise<string>} */
 function readStdin() {
   return new Promise((resolve) => {
@@ -67,6 +76,18 @@ async function run() {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+/** True when this file is the entry script, directly or through a symlink. */
+function isMain() {
+  try {
+    const arg = process.argv[1];
+    if (!arg) return false;
+    if (import.meta.url === pathToFileURL(arg).href) return true;
+    return fs.realpathSync(arg) === fs.realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (isMain()) {
   run().finally(() => process.exit(0));
 }

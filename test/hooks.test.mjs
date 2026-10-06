@@ -44,10 +44,25 @@ test('agent_type is trimmed and lowercased', () => {
   expect(mapHookInput('agent-start', { agent_type: '  Backend ' })).toMatchObject({ agent: 'backend' });
   expect(mapHookInput('tool', { ...fx('tool-in-subagent'), agent_type: ' Tester\n' })).toMatchObject({ agent: 'tester' });
 });
-test('Bash never leaks beyond two words', () => {
-  const r = mapHookInput('tool', { tool_name: 'Bash', tool_input: { command: '  npm   test -- --token=abc' } });
-  expect(r.action).toBe('Running npm test');
-  expect(mapHookInput('tool', { tool_name: 'Bash', tool_input: { command: 'ls' } }).action).toBe('Running ls');
+test('Bash action: env assignments skipped, flags and key=value args never included', () => {
+  const act = (command) => mapHookInput('tool', { tool_name: 'Bash', tool_input: { command } })?.action ?? null;
+  expect(act('FOO=x make build')).toBe('Running make build');
+  expect(act('npm test -- --token=abc')).toBe('Running npm test');
+  expect(act('mysql -pS3cret db')).toBe('Running mysql');
+  expect(act('curl --header=x y')).toBe('Running curl');
+  expect(act('A=1 B=2')).toBeNull();
+  expect(act('git push')).toBe('Running git push');
+  expect(act('  npm   test  ')).toBe('Running npm test');
+  expect(act('ls')).toBe('Running ls');
+});
+test('actions are capped at 120 chars with an ellipsis', () => {
+  const long = 'a'.repeat(200);
+  const e = mapHookInput('tool', { tool_name: 'Edit', tool_input: { file_path: `/x/${long}.ts` } }).action;
+  expect(e).toHaveLength(120);
+  expect(e.endsWith('\u2026')).toBe(true);
+  const b = mapHookInput('tool', { tool_name: 'Bash', tool_input: { command: long } }).action;
+  expect(b).toHaveLength(120);
+  expect(b).toBe(`Running ${long}`.slice(0, 119) + '\u2026');
 });
 test('Edit shows basename only', () => {
   expect(mapHookInput('tool', { tool_name: 'Edit', tool_input: { file_path: '/a/b/My File.ts' } }).action).toBe('Editing My File.ts');
@@ -107,6 +122,15 @@ test('CLI: ignored fixture appends nothing', () => {
   const dir = proj(); fs.mkdirSync(path.join(dir, '.team'), { recursive: true });
   silent(spawn('tool', JSON.stringify(fx('post-agent')), { CLAUDE_PROJECT_DIR: dir }));
   expect(events(dir)).toEqual([]);
+});
+
+test('CLI: runs when invoked through a symlink (path with a space)', () => {
+  const dir = proj(); fs.mkdirSync(path.join(dir, '.team'), { recursive: true });
+  const link = path.join(base(), 'my link.mjs');
+  fs.symlinkSync(SCRIPT, link);
+  const r = spawnSync(process.execPath, [link, 'tool'], { input: JSON.stringify(fx('tool-in-subagent')), env: { ...process.env, CLAUDE_PROJECT_DIR: dir }, encoding: 'utf8' });
+  silent(r);
+  expect(events(dir)).toHaveLength(1);
 });
 
 // ---- template ----
