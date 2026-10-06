@@ -173,4 +173,28 @@ describe('parseSettings', () => {
       expect(r.error).toMatch(/object/);
     }
   });
+  it('strips a leading UTF-8 BOM', () => {
+    expect(parseSettings('\uFEFF{"a":1}')).toEqual({ ok: true, settings: { a: 1 } });
+    expect(parseSettings('\uFEFF')).toEqual({ ok: true, settings: {} });
+  });
+  it('refuses a hooks value that is not a plain object', () => {
+    for (const t of ['{"hooks":[]}', '{"hooks":"x"}', '{"hooks":null}', '{"hooks":5}']) {
+      const r = parseSettings(t);
+      expect(r.ok).toBe(false);
+      expect(r.error).toMatch(/"hooks"/);
+      expect(r.error).toMatch(/nothing was changed/);
+    }
+  });
+  it('refuses a hooks event whose value is not an array', () => {
+    for (const t of ['{"hooks":{"PostToolUse":{}}}', '{"hooks":{"Stop":"x"}}', '{"hooks":{"Stop":null}}']) {
+      const r = parseSettings(t);
+      expect(r.ok).toBe(false);
+      expect(r.error).toMatch(/hooks\./);
+      expect(r.error).toMatch(/array/);
+    }
+  });
+  it('accepts a valid hooks object with array events', () => {
+    const r = parseSettings('{"hooks":{"Stop":[]}}');
+    expect(r).toEqual({ ok: true, settings: { hooks: { Stop: [] } } });
+  });
 });
