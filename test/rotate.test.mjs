@@ -89,3 +89,11 @@ test('default threshold is 5 MB', () => {
   seed();
   expect(rotateIfNeeded(log, team, now)).toEqual({ rotated: false });
 });
+
+test('a fold failure throws and leaves the log untouched', () => {
+  seed();
+  const before = fs.readFileSync(log, 'utf8');
+  expect(() => rotateIfNeeded(log, null, now, 200)).toThrow();
+  expect(fs.readFileSync(log, 'utf8')).toBe(before);
+  expect(fs.readdirSync(path.join(dir, '.team'))).toEqual(['events.jsonl']);
+});
