@@ -416,10 +416,104 @@ describe('uninstall', () => {
     expect(exists('.claude/agents/frontend.md')).toBe(false);
   });
 
+  test('uninstall with only a CLAUDE.md block and no .team folder works', async () => {
+    write('CLAUDE.md', '# Mine\n\n<!-- agent-team-kit:start -->\nold\n<!-- agent-team-kit:end -->\n');
+    const r = await uninstall();
+    expect(r.err).toBe('');
+    expect(r.code).toBe(0);
+    expect(read('CLAUDE.md')).toBe('# Mine\n');
+  });
+
   test('uninstall with nothing installed has nothing to do', async () => {
     write('README.md', 'hi\n');
     const r = await uninstall();
     expect(r.code).toBe(0);
     expect(r.out).toMatch(/Nothing to do/);
+  });
+});
+
+describe('fix round 1: safety', () => {
+  test('uninstall ignores manifest entries outside the kit file set', async () => {
+    await install();
+    const outside = path.join(root, 'out side');
+    fs.mkdirSync(outside, { recursive: true });
+    fs.writeFileSync(path.join(outside, 'victim.txt'), '');
+    const absVictim = path.join(root, 'abs victim.txt');
+    fs.writeFileSync(absVictim, '');
+    write('notes.txt', '');
+    const m = JSON.parse(read('.team/kit-manifest.json'));
+    m.files['../out side/victim.txt'] = sha('');
+    m.files[absVictim] = sha('');
+    m.files['notes.txt'] = sha('');
+    m.created.push('src/index.js', '../out side/victim.txt');
+    write('.team/kit-manifest.json', JSON.stringify(m, null, 2));
+
+    const plan = planUninstall({ targetDir: target });
+    expect(plan.map((c) => c.path).filter((x) => x.includes('victim') || x === 'notes.txt')).toEqual([]);
+    const r = await uninstall();
+    expect(r.code).toBe(0);
+    expect(fs.existsSync(path.join(outside, 'victim.txt'))).toBe(true);
+    expect(fs.existsSync(absVictim)).toBe(true);
+    expect(exists('notes.txt')).toBe(true);
+  });
+
+  test('uninstall keeps directories that existed before the first install', async () => {
+    fs.mkdirSync(p('.claude/agents'), { recursive: true });
+    await install();
+    await install();
+    expect(JSON.parse(read('.team/kit-manifest.json')).createdDirs).not.toContain('.claude/agents');
+    await uninstall();
+    expect(fs.statSync(p('.claude/agents')).isDirectory()).toBe(true);
+    expect(exists('.team/bin')).toBe(false);
+  });
+
+  test('re-install keeps the original settings.json.bak', async () => {
+    const original = '{\n  "model": "opus"\n}\n';
+    write('.claude/settings.json', original);
+    await install();
+    expect(read('.claude/settings.json.bak')).toBe(original);
+    write('.claude/settings.json', '{\n  "model": "sonnet"\n}\n');
+    const plan = planInstall({ kitDir: KIT, targetDir: target });
+    expect(plan.find((c) => c.path === '.claude/settings.json').action).toBe('update');
+    expect(plan.find((c) => c.path === '.claude/settings.json.bak')).toBeUndefined();
+    await install();
+    expect(read('.claude/settings.json.bak')).toBe(original);
+  });
+
+  test('a dangling symlink destination is a conflict and is never written through', async () => {
+    const evil = path.join(root, 'outside', 'evil.md');
+    fs.mkdirSync(p('.claude/agents'), { recursive: true });
+    fs.symlinkSync(evil, p('.claude/agents/backend.md'));
+    const plan = planInstall({ kitDir: KIT, targetDir: target });
+    const c = plan.find((x) => x.path === '.claude/agents/backend.md');
+    expect(c).toMatchObject({ action: 'conflict', reason: 'is a symlink' });
+    applyChanges(plan, { targetDir: target, resolveConflict: () => true });
+    expect(fs.existsSync(evil)).toBe(false);
+    expect(fs.lstatSync(p('.claude/agents/backend.md')).isSymbolicLink()).toBe(true);
+    expect(JSON.parse(read('.team/kit-manifest.json')).files['.claude/agents/backend.md']).toBeUndefined();
+
+    const r = await cli(['--target', target], { answers: ['y'] });
+    expect(r.code).toBe(0);
+    expect(r.questions).toEqual(['Apply these changes? (y/n)']);
+    expect(r.out).toMatch(/symlink/);
+    expect(fs.existsSync(evil)).toBe(false);
+  });
+
+  test('a symlinked .claude directory is never written through', async () => {
+    const elsewhere = path.join(root, 'elsewhere');
+    fs.mkdirSync(elsewhere);
+    fs.symlinkSync(elsewhere, p('.claude'));
+    const r = await install();
+    expect(r.code).toBe(0);
+    expect(fs.readdirSync(elsewhere)).toEqual([]);
+    expect(exists('.team/planner.md')).toBe(true);
+  });
+
+  test('uninstall says events.jsonl was kept and is no longer git-ignored', async () => {
+    await install();
+    write('.team/events.jsonl', '{}\n');
+    const r = await uninstall();
+    expect(r.out).toMatch(/\.team\/events\.jsonl.*no longer git-ignored/);
+    expect(exists('.team/events.jsonl')).toBe(true);
   });
 });

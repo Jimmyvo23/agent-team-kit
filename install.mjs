@@ -96,6 +96,10 @@ export async function main(argv, io) {
   /** @type {Map<string, boolean>} */
   const decisions = new Map();
   for (const c of pending.filter((x) => x.action === 'conflict')) {
+    if (c.symlink) {
+      out(`Skipped ${c.path}: it is a symlink, so the Kit will not write or delete through it.`);
+      continue;
+    }
     if (c.content !== undefined) {
       const current = fs.readFileSync(path.join(targetDir, ...c.path.split('/')), 'utf8');
       const { added, removed } = diffCounts(c.content, current);
@@ -116,6 +120,11 @@ export async function main(argv, io) {
 
   applyChanges(changes, { targetDir, resolveConflict: (c) => decisions.get(c.path) === true });
   out(uninstall ? 'Uninstalled. team.json and handoffs were kept.' : 'Installed.');
+  if (uninstall && fs.existsSync(path.join(targetDir, '.team'))) {
+    const logs = fs.readdirSync(path.join(targetDir, '.team'), { withFileTypes: true })
+      .filter((e) => e.isFile() && /^events.*\.jsonl$/.test(e.name)).map((e) => `.team/${e.name}`);
+    for (const log of logs) out(`Kept ${log} (the team's activity log); it is no longer git-ignored, so delete it or ignore it yourself before committing.`);
+  }
   return 0;
 }
 
