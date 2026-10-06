@@ -1,0 +1,11 @@
+{
+  "SubagentStart": [
+    { "hooks": [ { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.team/bin/hooks/record.mjs\" agent-start" } ] }
+  ],
+  "SubagentStop": [
+    { "hooks": [ { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.team/bin/hooks/record.mjs\" agent-stop" } ] }
+  ],
+  "PostToolUse": [
+    { "matcher": "Edit|Write|Bash", "hooks": [ { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.team/bin/hooks/record.mjs\" tool" } ] }
+  ]
+}
