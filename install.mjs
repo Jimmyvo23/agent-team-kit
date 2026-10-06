@@ -1,0 +1,173 @@
+#!/usr/bin/env node
+// @ts-check
+// agent-team-kit installer.
+// Usage: node install.mjs --target <project> [--uninstall] [--yes]
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { parseArgs } from 'node:util';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { checkPrereqs } from './lib/install/checks.mjs';
+import { planInstall, planUninstall, applyChanges } from './lib/install/plan.mjs';
+
+const KIT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const USAGE = 'Usage: node install.mjs --target <project> [--uninstall] [--yes]';
+
+/**
+ * Lines added and removed going from `a` to `b` (line-based LCS).
+ * @param {string} a
+ * @param {string} b
+ * @returns {{ added: number, removed: number }}
+ */
+export function diffCounts(a, b) {
+  const x = a.split('\n');
+  const y = b.split('\n');
+  let prev = new Array(y.length + 1).fill(0);
+  for (let i = 1; i <= x.length; i++) {
+    const row = new Array(y.length + 1).fill(0);
+    for (let j = 1; j <= y.length; j++) {
+      row[j] = x[i - 1] === y[j - 1] ? prev[j - 1] + 1 : Math.max(prev[j], row[j - 1]);
+    }
+    prev = row;
+  }
+  const common = prev[y.length];
+  return { added: y.length - common, removed: x.length - common };
+}
+
+/** @param {string} answer */
+const isYes = (answer) => /^\s*y(es)?\s*$/i.test(answer);
+
+/**
+ * @param {string[]} argv arguments after the script name
+ * @param {{ cwd: string, homeDir: string, nodeVersion: string, stdout: (s: string) => void, stderr: (s: string) => void, ask: (question: string) => Promise<string> }} io
+ * @returns {Promise<number>} exit code
+ */
+export async function main(argv, io) {
+  const out = (/** @type {string} */ s) => io.stdout(`${s}\n`);
+  const fail = (/** @type {string} */ s) => { io.stderr(`${s}\n`); return 1; };
+
+  let values;
+  try {
+    ({ values } = parseArgs({
+      args: argv,
+      options: { target: { type: 'string' }, uninstall: { type: 'boolean' }, yes: { type: 'boolean' } },
+      strict: true,
+      allowPositionals: false,
+    }));
+  } catch (e) {
+    return fail(`${/** @type {Error} */ (e).message}. ${USAGE}`);
+  }
+  if (!values.target) return fail(`Missing --target. ${USAGE}`);
+  const targetDir = path.resolve(io.cwd, values.target);
+  const uninstall = values.uninstall === true;
+
+  if (!uninstall) {
+    const problems = checkPrereqs({ targetDir, nodeVersion: io.nodeVersion, homeDir: io.homeDir });
+    if (problems.length > 0) {
+      return fail(`Cannot install yet:\n${problems.map((p) => `- ${p}`).join('\n')}`);
+    }
+    out('Checks passed: Node, Git repository, Superpowers and frontend-design plugins.');
+  } else if (!fs.existsSync(targetDir)) {
+    return fail(`${targetDir} does not exist.`);
+  }
+
+  let changes;
+  try {
+    changes = uninstall ? planUninstall({ targetDir }) : planInstall({ kitDir: KIT_DIR, targetDir });
+  } catch (e) {
+    return fail(/** @type {Error} */ (e).message);
+  }
+
+  const pending = changes.filter((c) => c.action !== 'unchanged');
+  const unchanged = changes.length - pending.length;
+  if (pending.length === 0) {
+    out(`Nothing to do in ${targetDir}; everything is up to date.`);
+    return 0;
+  }
+  out(`${uninstall ? 'Uninstall' : 'Install'} into ${targetDir}:`);
+  for (const c of pending) out(`  ${c.action.padEnd(8)}  ${c.path}${c.reason ? ` (${c.reason})` : ''}`);
+  if (unchanged > 0) out(`  ${unchanged} file${unchanged === 1 ? '' : 's'} unchanged.`);
+
+  if (!values.yes && !isYes(await io.ask('Apply these changes? (y/n)'))) {
+    out('No changes made.');
+    return 0;
+  }
+
+  /** @type {Map<string, boolean>} */
+  const decisions = new Map();
+  for (const c of pending.filter((x) => x.action === 'conflict')) {
+    if (c.symlink) {
+      out(`Skipped ${c.path}: it is a symlink, so the Kit will not write or delete through it.`);
+      continue;
+    }
+    if (c.content !== undefined) {
+      const current = fs.readFileSync(path.join(targetDir, ...c.path.split('/')), 'utf8');
+      const { added, removed } = diffCounts(c.content, current);
+      out(`${c.path} differs from the Kit's version: your copy has ${added} line${added === 1 ? '' : 's'} added, ${removed} removed.`);
+    } else {
+      out(`${c.path} was changed after it was installed.`);
+    }
+    if (values.yes) {
+      out(`Kept your customised ${c.path} (--yes never replaces customised files).`);
+      decisions.set(c.path, false);
+      continue;
+    }
+    const verb = c.content === undefined ? 'Delete' : 'Replace';
+    const yes = isYes(await io.ask(`${verb} your customised ${c.path}? (y/n)`));
+    if (!yes) out(`Kept ${c.path}.`);
+    decisions.set(c.path, yes);
+  }
+
+  applyChanges(changes, { targetDir, resolveConflict: (c) => decisions.get(c.path) === true });
+  out(uninstall ? 'Uninstalled. team.json and handoffs were kept.' : 'Installed.');
+  if (uninstall && fs.existsSync(path.join(targetDir, '.team'))) {
+    const logs = fs.readdirSync(path.join(targetDir, '.team'), { withFileTypes: true })
+      .filter((e) => e.isFile() && /^events.*\.jsonl$/.test(e.name)).map((e) => `.team/${e.name}`);
+    for (const log of logs) out(`Kept ${log} (the team's activity log); it is no longer git-ignored, so delete it or ignore it yourself before committing.`);
+  }
+  return 0;
+}
+
+/** True when this file is the entry script, directly or through a symlink. */
+function isMain() {
+  try {
+    const arg = process.argv[1];
+    if (!arg) return false;
+    if (import.meta.url === pathToFileURL(arg).href) return true;
+    return fs.realpathSync(arg) === fs.realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (isMain()) {
+  const { createInterface } = await import('node:readline');
+  // One reader for the whole run, so piped answers ("y\ny\n") are not lost between questions.
+  const rl = createInterface({ input: process.stdin });
+  /** @type {string[]} */ const lines = [];
+  /** @type {((s: string) => void)[]} */ const waiting = [];
+  let closed = false;
+  rl.on('line', (line) => { const w = waiting.shift(); if (w) w(line); else lines.push(line); });
+  rl.on('close', () => { closed = true; for (const w of waiting.splice(0)) w(''); });
+  /**
+   * Ask on the terminal; a closed stdin (no answer possible) counts as "no".
+   * @param {string} question
+   * @returns {Promise<string>}
+   */
+  const ask = (question) => {
+    process.stdout.write(`${question} `);
+    const line = lines.shift();
+    if (line !== undefined) return Promise.resolve(line);
+    if (closed) return Promise.resolve('');
+    return new Promise((resolve) => waiting.push(resolve));
+  };
+  const code = await main(process.argv.slice(2), {
+    cwd: process.cwd(),
+    homeDir: os.homedir(),
+    nodeVersion: process.version,
+    stdout: (s) => process.stdout.write(s),
+    stderr: (s) => process.stderr.write(s),
+    ask,
+  });
+  process.exit(code);
+}
