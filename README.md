@@ -34,14 +34,22 @@ It prints every change it will make and asks `Apply these changes? (y/n)`. Add `
 What it puts in the project:
 
 - `.claude/agents/` with the four subagent files
-- `.claude/settings.json` with three hooks added (your existing settings and hooks are kept; the first copy of your file is saved as `settings.json.bak`)
+- `.claude/settings.json` with four hooks added (subagent start and stop, file edits and commands, and the end of each main-session turn) (your existing settings and hooks are kept; the first copy of your file is saved as `settings.json.bak`)
 - `.team/bin/` with `team-status.mjs`, the hook script and their helpers
 - `.team/planner.md`, `.team/work-order-template.md`, `.team/handoffs/handoff-template.md`
 - `.team/team.json` (the team and the approver; edit it to rename people)
 - `.team/kit-manifest.json` (what the kit installed, so update and uninstall are safe)
 - a marked "Team" section in `CLAUDE.md` and a marked block in `.gitignore`
 
-Update: pull the new kit and run the same command again. Files you have not touched are updated. If you edited a kit file, the installer shows how it differs and asks before replacing it (`--yes` never replaces a file you customised).
+Update, from this repo:
+
+```
+git pull
+npm ci
+node install.mjs --target ../CookNeighbour
+```
+
+Re-running the installer updates the installed files. Files you have not touched are updated, and kit files that a newer kit no longer ships are removed (unless you changed them). If you edited a kit file, the installer shows a short diff and asks before replacing it (`--yes` never replaces a file you customised). The next `npm run office` rebuilds the dashboard by itself when its sources changed.
 
 Uninstall:
 
@@ -60,7 +68,7 @@ npm ci
 npm run office -- --project ../CookNeighbour
 ```
 
-Relative paths are taken from the folder where you run the command. Options: `--project <path>` (required, must contain `.team/`) and `--port <1-65535>` (default 4317). The first run builds the dashboard (`npm run build`), then it prints `Office is open at http://127.0.0.1:4317` and opens your browser. Press Ctrl+C to stop. If the port is busy, use `--port`.
+Relative paths are taken from the folder where you run the command. Options: `--project <path>` (required, must contain `.team/`) and `--port <1-65535>` (default 4317). The first run, and the first run after the dashboard sources change, builds the dashboard (`npm run build`), then it prints `Office is open at http://127.0.0.1:4317` and opens your browser. Press Ctrl+C to stop. If the port is busy, use `--port`.
 
 The dashboard binds to `127.0.0.1` only, so nobody else on your network can see it. It reads `.team/events.jsonl` every 3 seconds and also writes `agent-status.json` at the project root (git-ignored).
 
@@ -70,8 +78,8 @@ The dashboard binds to `127.0.0.1` only, so nobody else on your network can see 
 2. Before a batch of work, each agent that will work submits a plan summary of 100 words or fewer. The Planner combines them into a Work Order.
 3. The Planner records one approval per agent per Work Order (for example `WO-3-backend` and `WO-3-frontend`) and asks you to approve, reject or approve with changes. The office shows these at the approver's desk.
 4. After you approve, the builders work on a feature branch and open a pull request. The Tester verifies and the Reviewer is the final gate. The Planner merges and closes the issue.
-5. Each agent writes `.team/handoffs/<task-id>.md` when it finishes, so the next agent does not need the story repeated.
-6. After two failed rounds on one task, the Planner escalates to you.
+5. Each agent writes `.team/handoffs/<task-id>-<agent id>.md` (for example `T-004-backend.md`, then `T-004-tester.md`) when it finishes, so the next agent does not need the story repeated. The Reviewer reads both.
+6. After two failed rounds on one task, the Planner escalates to you. The escalation clears on the next `task` event for that task id.
 
 ## team-status reference
 
@@ -87,7 +95,7 @@ node .team/bin/team-status.mjs status --agent backend --status working --task T-
 | `task` | `--id <id> --title <text> --owner <agent> --state <state> [--notes <text>]` |
 | `approval` | `--id <id> --summary <text> [--agents a,b]` |
 | `decide` | `--id <id> --state <state> [--note <text>]` |
-| `handoff` | `--from <agent> --to <agent> --task <id> [--file <path>]` |
+| `handoff` | `--from <agent> --to <agent> --task <id> [--file <path>]` (default file `.team/handoffs/<task>-<from>.md`) |
 | `escalate` | `--task <id> --summary <text>` |
 
 Values:
@@ -96,7 +104,9 @@ Values:
 - Task state: `todo`, `in_progress`, `in_review`, `done`.
 - Approval state (for `decide`): `approved`, `rejected`, `changes_requested`.
 
-Ids are matched ignoring case, so `Backend` and `backend` are the same desk.
+Ids are matched ignoring case, so `Backend` and `backend` are the same desk. If `.team/team.json` exists and an `--agent`, `--owner`, `--from`, `--to` or `--agents` id is not on the team, the CLI prints one warning line (a likely typo) but still writes the event.
+
+An escalation shows on the needs-you sign until the next `task` event for that task id; the escalation clears then, whatever the new state.
 
 ## Known limits
 
