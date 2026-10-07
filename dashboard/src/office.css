@@ -1,0 +1,396 @@
+/* Office scene. Colours come only from theme.css tokens. */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body { margin: 0; }
+
+body {
+  font-family: var(--font);
+  color: var(--ink);
+  background: var(--grass-2);
+  -webkit-font-smoothing: antialiased;
+}
+
+.scene {
+  position: relative;
+  min-height: 100vh;
+  overflow: hidden;
+  padding: 8px 16px 32px;
+  background: linear-gradient(var(--sky) 0, var(--sky-2) 480px);
+}
+
+.scene-message {
+  max-width: 560px;
+  margin: 15vh auto 0;
+  padding: 24px;
+  background: var(--paper);
+  border: 3px solid var(--ink);
+  border-radius: 10px;
+  box-shadow: var(--hard-shadow);
+  line-height: 1.5;
+}
+.scene-message h1 { margin: 0 0 8px; font-size: 24px; font-weight: 800; }
+.scene-message p { margin: 0 0 6px; }
+
+/* Clouds */
+.cloud {
+  position: absolute;
+  top: 28px;
+  left: -120px;
+  width: 90px;
+  height: 26px;
+  background: var(--cloud);
+  border-radius: 20px;
+  opacity: 0.85;
+}
+.cloud::before {
+  content: '';
+  position: absolute;
+  left: 18px;
+  top: -16px;
+  width: 40px;
+  height: 34px;
+  background: var(--cloud);
+  border-radius: 50%;
+}
+.cloud-far { top: 74px; left: 70%; transform: scale(0.7); }
+
+/* Layout: building, then the clipboard on the right */
+.office {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 270px;
+  gap: 20px;
+  max-width: 1120px;
+  margin: 0 auto;
+}
+
+/* Building. Its ground line is where the grass starts, across the whole scene. */
+.building { position: relative; align-self: start; }
+.building::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: -100vw;
+  right: -100vw;
+  z-index: -1;
+  height: 100vh;
+  background: linear-gradient(var(--grass), var(--grass-2) 60%);
+  border-top: 4px solid var(--grass-2);
+}
+
+.sign-slot { position: relative; min-height: 54px; }
+
+.roof {
+  width: 92%;
+  height: 40px;
+  margin: 0 auto -2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--frame);
+  clip-path: polygon(4% 100%, 12% 0, 88% 0, 96% 100%);
+  color: var(--on-frame);
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+
+.house {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+  background: var(--frame);
+  border: 6px solid var(--frame);
+  border-radius: 6px;
+}
+
+.room-slot { position: relative; }
+.room-slot:hover, .room-slot:focus-within { z-index: 4; }
+/* The approver always gets the top-right corner office. */
+.room-slot-approver { grid-row: 1; grid-column: -2 / -1; }
+
+/* Room */
+.room {
+  position: relative;
+  height: 150px;
+  overflow: hidden;
+  background: var(--wall);
+  cursor: pointer;
+  transition: filter 0.4s;
+}
+.room::after {
+  content: '';
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 22px;
+  background: var(--wood);
+}
+.room:focus { outline: none; }
+.room[aria-pressed='true'] { outline: 4px solid var(--ink); outline-offset: -4px; }
+.room:focus-visible {
+  outline: 4px solid var(--ink);
+  outline-offset: -4px;
+  box-shadow: inset 0 0 0 7px var(--paper);
+}
+
+.room-window {
+  position: absolute;
+  top: 14px;
+  left: 12px;
+  width: 34px;
+  height: 40px;
+  background: var(--sky-2);
+  border: 3px solid var(--paper);
+  border-radius: 4px 4px 0 0;
+}
+.room-lamp {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  width: 2px;
+  height: 16px;
+  background: var(--ink);
+}
+.room-lamp::after {
+  content: '';
+  position: absolute;
+  top: 14px;
+  left: -9px;
+  width: 20px;
+  height: 10px;
+  border-radius: 10px 10px 0 0;
+  background: var(--ink);
+}
+.room-glow {
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  width: 160px;
+  height: 120px;
+  margin-left: -80px;
+  pointer-events: none;
+  background: radial-gradient(ellipse at top, var(--glow-working), transparent 70%);
+}
+.room-bubble {
+  position: absolute;
+  top: 30px;
+  left: 58%;
+  padding: 0 8px;
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  border-radius: 12px;
+  font-size: 16px;
+  font-weight: 800;
+}
+.room-door {
+  position: absolute;
+  right: 10px;
+  bottom: 22px;
+  width: 30px;
+  height: 52px;
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  border-bottom: 0;
+  border-radius: 4px 4px 0 0;
+}
+.room-plaque {
+  position: absolute;
+  right: 6px;
+  bottom: 80px;
+  max-width: calc(100% - 60px);
+  padding: 1px 6px;
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.room-name {
+  position: absolute;
+  left: 10px;
+  bottom: 2px;
+  z-index: 2;
+  font-size: 13px;
+  font-weight: 800;
+}
+.room-tray {
+  position: absolute;
+  /* Sits on the desk, where the others have a screen. */
+  left: calc(50% + 7px);
+  bottom: 38px;
+  width: 30px;
+  height: 12px;
+  background: var(--wood);
+  border: 2px solid var(--ink);
+  border-top: 0;
+}
+.room-tray i {
+  position: absolute;
+  left: 3px;
+  width: 22px;
+  height: 3px;
+  background: var(--paper);
+  border: 1px solid var(--ink);
+}
+
+/* Figure */
+.figure {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  margin-left: -45px;
+  stroke: var(--ink);
+  stroke-width: 3;
+  stroke-linecap: round;
+}
+.fill-ink { fill: var(--ink); }
+.fill-sky { fill: var(--sky); }
+.fill-paper { fill: var(--paper); }
+.fill-wood { fill: var(--wood); }
+.steam { opacity: 0; }
+
+/* Lights tell the state */
+.room.state-idle, .room.state-done { filter: var(--lights-dimmed); }
+.state-idle .room-glow, .state-done .room-glow { opacity: 0; }
+.state-blocked .room-glow { background: radial-gradient(ellipse at top, var(--glow-blocked), transparent 70%); }
+.state-awaiting_approval .room-glow { background: radial-gradient(ellipse at top, var(--glow-waiting), transparent 70%); }
+.state-blocked .room-bubble { background: var(--alert); color: var(--paper); }
+.state-awaiting_approval .room-bubble { background: var(--approval); }
+.room.state-done .room-plaque { background: var(--pill-done); border-color: var(--done); }
+
+/* State pills (preview card and clipboard). These are not rooms, so no dimming. */
+.state-pill {
+  display: inline-block;
+  padding: 2px 10px;
+  border: 2px solid var(--ink);
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 800;
+}
+.state-pill.state-working { background: var(--pill-working); }
+.state-pill.state-idle { background: var(--pill-idle); }
+.state-pill.state-blocked { background: var(--pill-blocked); border-color: var(--alert); }
+.state-pill.state-awaiting_approval { background: var(--pill-waiting); }
+.state-pill.state-done { background: var(--pill-done); border-color: var(--done); }
+
+/* Progress meter */
+.meter {
+  height: 14px;
+  margin-top: 4px;
+  overflow: hidden;
+  background: var(--meter-track);
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+}
+.meter > div { height: 100%; }
+.meter-small { flex: 1; height: 10px; margin: 0; }
+
+/* Hover preview */
+.preview {
+  position: absolute;
+  top: calc(100% - 30px);
+  left: 10px;
+  z-index: 5;
+  width: min(240px, calc(100% - 20px));
+  min-width: 190px;
+  padding: 10px 12px;
+  pointer-events: none;
+  background: var(--paper);
+  border: 3px solid var(--ink);
+  border-radius: 10px;
+  box-shadow: var(--hard-shadow);
+  font-size: 13px;
+}
+.preview-head { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; justify-content: space-between; }
+.preview-head strong { font-size: 16px; font-weight: 800; }
+.preview-head .state-pill { font-size: 12px; padding: 0 8px; }
+.preview-task { margin-top: 6px; }
+.preview-progress { display: flex; gap: 8px; align-items: center; margin-top: 6px; font-weight: 600; }
+
+/* Clipboard */
+.clipboard {
+  position: relative;
+  align-self: start;
+  margin-top: 54px;
+  padding: 28px 16px 16px;
+  background: var(--paper);
+  border: 3px solid var(--ink);
+  border-radius: 10px;
+  box-shadow: var(--hard-shadow);
+  font-size: 14px;
+  line-height: 1.4;
+}
+.clipboard::before {
+  content: '';
+  position: absolute;
+  top: -12px;
+  left: 50%;
+  width: 68px;
+  height: 22px;
+  margin-left: -34px;
+  background: var(--clip-metal);
+  border: 3px solid var(--ink);
+  border-radius: 6px;
+}
+.clipboard-empty { margin: 0; font-size: 15px; }
+.clipboard-name { margin: 0; font-size: 26px; font-weight: 800; line-height: 1.1; }
+.clipboard-role { margin: 2px 0 10px; font-size: 13px; }
+.clipboard-stale {
+  margin: 10px 0 0;
+  padding: 4px 8px;
+  background: var(--pill-blocked);
+  border-left: 5px solid var(--alert);
+  border-radius: 4px;
+  font-weight: 600;
+}
+.clipboard-facts { margin: 12px 0 0; }
+.clipboard-facts dt { margin-top: 10px; font-size: 12px; font-weight: 800; }
+.clipboard-facts dd { margin: 0; }
+.clipboard-note { display: block; margin-top: 4px; font-size: 12px; font-weight: 600; }
+.clipboard-approvals { margin: 2px 0 0; padding-left: 18px; }
+.clipboard-approvals li { margin-bottom: 4px; }
+.clipboard-history { margin-top: 14px; padding-top: 8px; border-top: 2px dashed var(--ink); font-size: 12px; }
+.clipboard-history h3 { margin: 0 0 4px; font-size: 12px; font-weight: 800; }
+.clipboard-history ol { margin: 0; padding: 0; list-style: none; line-height: 1.7; }
+.clipboard-history time { margin-right: 6px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.clipboard-quiet { margin: 0; }
+.clipboard-updated { margin: 6px 0 0; opacity: 0.75; }
+
+/* Phones: rooms two across, clipboard under the building */
+@media (max-width: 760px) {
+  .office { grid-template-columns: minmax(0, 1fr); }
+  .house { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .clipboard { margin-top: 8px; }
+  .roof { font-size: 15px; }
+  .room-plaque { max-width: calc(100% - 16px); font-size: 10px; }
+}
+
+/*
+ * Motion is for state only: calm states stay calm; only stuck and waiting draw the eye.
+ * Everything animated lives inside this block, so reduced motion turns all of it off.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  .cloud { animation: drift 70s linear infinite; }
+  .cloud-far { animation-duration: 100s; animation-delay: -45s; }
+
+  .state-working .arm-left { transform-box: fill-box; transform-origin: top right; animation: tap 0.3s infinite alternate; }
+  .state-working .arm-right { transform-box: fill-box; transform-origin: top left; animation: tap 0.3s infinite alternate-reverse; }
+  .state-idle .steam { animation: steam 2.6s infinite; }
+  .state-idle .steam-late { animation-delay: 1.2s; }
+
+  .state-blocked .room-glow { animation: siren 1.1s ease-in-out infinite; }
+  .state-awaiting_approval .room-bubble { animation: nudge 1.4s ease-in-out infinite; }
+  .state-awaiting_approval .arm-right { transform-box: fill-box; transform-origin: bottom left; animation: wave 0.8s infinite alternate; }
+}
+
+@keyframes drift { from { left: -120px; } to { left: 110%; } }
+@keyframes siren { 0%, 100% { opacity: 0.35; } 50% { opacity: 1; } }
+@keyframes nudge { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+@keyframes tap { from { transform: rotate(0); } to { transform: rotate(-10deg); } }
+@keyframes wave { from { transform: rotate(-8deg); } to { transform: rotate(20deg); } }
+@keyframes steam { 0% { opacity: 0; transform: translateY(0); } 40% { opacity: 0.8; } 100% { opacity: 0; transform: translateY(-12px); } }
