@@ -17,7 +17,7 @@ Evidence: the trial's `.team/events.jsonl` (74 events) and `/api/team` responses
 | 3e | Tester "Working", then both "Finished" | Pass | tester `status working`, then `done`; both `agent_stop` |
 | 3f | T-001 ticket ends in Done | Pass | `task` T-001 state done |
 | 3g | Tool use in a subagent lands on that agent's desk | Pass | `tool_use` events with agent backend / tester during their runs; main session → planner |
-| 3h | Visual: sign, folder animation, plaques, lobby in the browser | Pending | Jimmy's observation |
+| 3h | Visual: sign, folder animation, plaques, lobby in the browser | Pass | Observed by Jimmy: yellow room and sign, Backend → Tester folder with "New from Backend", Working → Finished, T-001 in Done |
 | 3i | Two subagents running at the same time | Not exercised | The trial task ran agents one after another; S-0's "team activity" fallback stays untested |
 
 ## Bugs found
