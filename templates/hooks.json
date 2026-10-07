@@ -5,7 +5,10 @@
   "SubagentStop": [
     { "hooks": [ { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.team/bin/hooks/record.mjs\" agent-stop" } ] }
   ],
+  "Stop": [
+    { "hooks": [ { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.team/bin/hooks/record.mjs\" turn-end" } ] }
+  ],
   "PostToolUse": [
-    { "matcher": "Edit|Write|Bash", "hooks": [ { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.team/bin/hooks/record.mjs\" tool" } ] }
+    { "matcher": "Edit|Write|MultiEdit|NotebookEdit|Bash", "hooks": [ { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/.team/bin/hooks/record.mjs\" tool" } ] }
   ]
 }

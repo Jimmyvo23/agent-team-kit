@@ -85,7 +85,7 @@ describe('mergeHooks', () => {
     const out = mergeHooks(s, kitHooks);
     expect(out.hooks.PreToolUse).toEqual(s.hooks.PreToolUse);
     expect(out.hooks.SubagentStart).toEqual(kitHooks.SubagentStart);
-    expect(kitCount(out)).toBe(3);
+    expect(kitCount(out)).toBe(4);
   });
   it('keeps a user hook in a PostToolUse group with the same matcher', () => {
     const s = { hooks: { PostToolUse: [{ matcher: 'Edit|Write|Bash', hooks: [userHook] }] } };
@@ -98,13 +98,13 @@ describe('mergeHooks', () => {
     const s = { hooks: { PostToolUse: [{ matcher: 'Bash', hooks: [userHook, stale] }] } };
     const out = mergeHooks(s, kitHooks);
     expect(out.hooks.PostToolUse[0]).toEqual({ matcher: 'Bash', hooks: [userHook] });
-    expect(kitCount(out)).toBe(3);
+    expect(kitCount(out)).toBe(4);
   });
   it('is idempotent', () => {
     const s = { model: 'x', hooks: { PreToolUse: [{ hooks: [userHook] }] } };
     const once = mergeHooks(s, kitHooks);
     expect(mergeHooks(once, kitHooks)).toEqual(once);
-    expect(kitCount(mergeHooks(once, kitHooks))).toBe(3);
+    expect(kitCount(mergeHooks(once, kitHooks))).toBe(4);
   });
   it('does not mutate its inputs and keeps other keys and order', () => {
     const s = { a: 1, hooks: { PreToolUse: [{ hooks: [userHook] }] }, z: 2 };

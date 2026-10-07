@@ -62,6 +62,17 @@ describe('agent files', () => {
     }
   });
 
+  test('builders and tester name their handoff <task-id>-<id>.md; reviewer reads builder and tester handoffs', () => {
+    for (const id of ['backend', 'frontend', 'tester']) {
+      expect(agent(id).body).toContain(`.team/handoffs/<task-id>-${id}.md`);
+      expect(agent(id).body).not.toMatch(/handoffs\/<task-id>\.md/);
+    }
+    const r = agent('reviewer').body;
+    expect(r).toContain('.team/handoffs/<task-id>-<builder id>.md');
+    expect(r).toContain('.team/handoffs/<task-id>-tester.md');
+    expect(r).not.toMatch(/handoffs\/<task-id>\.md/);
+  });
+
   test('every agent body has the five sections in order', () => {
     const order = ['Role', 'Boundaries', 'Skills to use', 'Reporting', 'Handoff'];
     for (const id of AGENTS) {
@@ -139,6 +150,20 @@ describe('planner files', () => {
     expect(planner).toContain('--agent planner');
   });
 
+  test('planner names handoff files per agent and dispatches by team id', () => {
+    expect(planner).toContain('.team/handoffs/<task-id>-<builder id>.md');
+    expect(planner).toContain('.team/handoffs/<task-id>-tester.md');
+    expect(planner).not.toMatch(/handoffs\/<task-id>\.md/);
+    expect(planner).not.toMatch(/previous handoff file/);
+    expect(planner).toMatch(/subagent_type/);
+    for (const id of ['backend', 'frontend', 'tester', 'reviewer']) expect(planner).toContain(`\`${id}\``);
+    expect(planner).toMatch(/never `general-purpose`/);
+  });
+
+  test('planner explains that an escalation clears on the next task event for that id', () => {
+    expect(planner).toMatch(/escalation clears .*next `task` event for that task id/i);
+  });
+
   test('planner names its skills', () => {
     for (const s of ['superpowers:brainstorming', 'superpowers:writing-plans', 'superpowers:subagent-driven-development']) {
       expect(planner).toContain(s);
@@ -165,5 +190,16 @@ describe('planner files', () => {
     expect(t).toContain('.team/planner.md');
     expect(t).toContain('team-status');
     expect(t).not.toMatch(/<!--/);
+    expect(t).toMatch(/subagent_type/);
+    expect(t).toContain('.team/handoffs/<task-id>-<agent id>.md');
+    expect(t).not.toMatch(/handoffs\/<task-id>\.md/);
+  });
+
+  test('README documents per-agent handoff files, escalation clearing and updating', () => {
+    const readme = read('README.md');
+    expect(readme).toContain('.team/handoffs/<task-id>-<agent id>.md');
+    expect(readme).not.toMatch(/handoffs\/<task-id>\.md/);
+    expect(readme).toMatch(/escalation clears .*next `task` event for that task id/i);
+    expect(readme).toMatch(/git pull[\s\S]*npm ci[\s\S]*install\.mjs/);
   });
 });

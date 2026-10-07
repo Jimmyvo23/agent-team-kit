@@ -79,11 +79,51 @@ test('decide writes approval_decided; pending is rejected', () => {
   expect(lines()).toHaveLength(1);
 });
 
-test('handoff defaults file and uses from as agent', () => {
+test('handoff defaults file to <task>-<from>.md and uses from as agent', () => {
   expect(run(['handoff', '--from', 'backend', '--to', 'tester', '--task', 'T-004'])).toBe(0);
-  expect(lines()[0]).toMatchObject({ type: 'handoff', agent: 'backend', from: 'backend', to: 'tester', task: 'T-004', file: '.team/handoffs/T-004.md' });
+  expect(lines()[0]).toMatchObject({ type: 'handoff', agent: 'backend', from: 'backend', to: 'tester', task: 'T-004', file: '.team/handoffs/T-004-backend.md' });
   run(['handoff', '--from', 'a', '--to', 'b', '--task', 'T', '--file', 'x.md']);
   expect(lines()[1].file).toBe('x.md');
+});
+
+test('handoff default file uses the normalized from id', () => {
+  expect(run(['handoff', '--from', ' Tester ', '--to', 'reviewer', '--task', 'T-004'])).toBe(0);
+  expect(lines()[0].file).toBe('.team/handoffs/T-004-tester.md');
+});
+
+const writeTeam = () => fs.copyFileSync(fileURLToPath(new URL('../templates/team.json', import.meta.url)), path.join(root, '.team', 'team.json'));
+
+test('unknown agent ids warn once on stderr but still write and exit 0', () => {
+  writeTeam();
+  expect(run(['status', '--agent', 'bakend', '--status', 'working'])).toBe(0);
+  expect(errs).toHaveLength(1);
+  expect(errs[0]).toMatch(/^Warning: .*bakend.*\n$/);
+  expect(errs[0].trim().split('\n')).toHaveLength(1);
+  errs = [];
+  expect(run(['approval', '--id', 'WO-1', '--summary', 'S', '--agents', 'backend,ghost,phantom'])).toBe(0);
+  expect(errs).toHaveLength(1);
+  expect(errs[0]).toMatch(/ghost/);
+  expect(errs[0]).toMatch(/phantom/);
+  errs = [];
+  expect(run(['handoff', '--from', 'backend', '--to', 'nobody', '--task', 'T-1'])).toBe(0);
+  expect(run(['task', '--id', 'T-1', '--title', 't', '--owner', 'someone', '--state', 'todo'])).toBe(0);
+  expect(errs).toHaveLength(2);
+  expect(lines()).toHaveLength(4);
+});
+
+test('member and approver ids match case-insensitively without a warning', () => {
+  writeTeam();
+  expect(run(['status', '--agent', ' Backend ', '--status', 'working'])).toBe(0);
+  expect(run(['handoff', '--from', 'Tester', '--to', 'REVIEWER', '--task', 'T-1'])).toBe(0);
+  expect(run(['approval', '--id', 'WO-1', '--summary', 'S', '--agents', 'backend, Jimmy'])).toBe(0);
+  expect(errs).toEqual([]);
+});
+
+test('no or invalid team.json means no warning', () => {
+  expect(run(['status', '--agent', 'anyone', '--status', 'working'])).toBe(0);
+  fs.writeFileSync(path.join(root, '.team', 'team.json'), '{ nope');
+  expect(run(['status', '--agent', 'anyone', '--status', 'working'])).toBe(0);
+  expect(errs).toEqual([]);
 });
 
 test('escalate writes an escalation by planner', () => {

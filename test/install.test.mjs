@@ -6,7 +6,7 @@ import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { planInstall, planUninstall, applyChanges } from '../lib/install/plan.mjs';
-import { main } from '../install.mjs';
+import { main, formatDiff } from '../install.mjs';
 
 const KIT = fileURLToPath(new URL('..', import.meta.url));
 const FIXTURE = fileURLToPath(new URL('./fixtures/hooks/subagent-start.json', import.meta.url));
@@ -21,6 +21,7 @@ const KIT_FILES = [
   '.team/bin/hooks/record.mjs',
   '.team/bin/lib/events.mjs',
   '.team/bin/lib/paths.mjs',
+  '.team/bin/lib/team.mjs',
   '.team/bin/team-status.mjs',
   '.team/handoffs/handoff-template.md',
   '.team/planner.md',
@@ -115,10 +116,10 @@ describe('install', () => {
     const md = read('CLAUDE.md');
     expect(md).toContain('<!-- agent-team-kit:start -->\n## Team');
     expect(md).toContain('<!-- agent-team-kit:end -->');
-    expect(read('.gitignore')).toBe('# agent-team-kit:start\n.team/events*.jsonl\nagent-status.json\n.superpowers/\n# agent-team-kit:end\n');
+    expect(read('.gitignore')).toBe('# agent-team-kit:start\n.team/events*.jsonl\nagent-status.json\n.superpowers/\n.claude/settings.json.bak\n# agent-team-kit:end\n');
 
     const settings = JSON.parse(read('.claude/settings.json'));
-    expect(Object.keys(settings.hooks).sort()).toEqual(['PostToolUse', 'SubagentStart', 'SubagentStop']);
+    expect(Object.keys(settings.hooks).sort()).toEqual(['PostToolUse', 'Stop', 'SubagentStart', 'SubagentStop']);
     expect(settings.hooks.SubagentStart[0].hooks[0].command).toBe('node "$CLAUDE_PROJECT_DIR/.team/bin/hooks/record.mjs" agent-start');
     expect(exists('.claude/settings.json.bak')).toBe(false);
 
@@ -224,6 +225,8 @@ describe('install', () => {
     expect(r.code).toBe(0);
     expect(r.questions).toEqual(['Apply these changes? (y/n)', `Replace your customised ${rel}? (y/n)`]);
     expect(r.out).toMatch(/2 lines added, 0 removed/);
+    expect(r.out).toMatch(/^ {2}\+extra line one$/m);
+    expect(r.out).toMatch(/^ {2}\+extra line two$/m);
     expect(read(rel)).toBe(custom);
 
     r = await cli(['--target', target, '--yes']);
@@ -328,6 +331,16 @@ describe('installed scripts', () => {
     expect(r.stderr).toBe('');
     expect(r.status).toBe(0);
     expect(lastEvent()).toMatchObject({ type: 'status', agent: 'backend', status: 'working', source: 'cli' });
+  });
+
+  test('installed team-status warns about an id not in team.json and still writes', async () => {
+    await install();
+    const r = spawnSync(process.execPath, ['.team/bin/team-status.mjs', 'status', '--agent', 'bakend', '--status', 'working'], {
+      cwd: target, env: cleanEnv(), encoding: 'utf8',
+    });
+    expect(r.status).toBe(0);
+    expect(r.stderr).toMatch(/^Warning: "bakend"/);
+    expect(lastEvent()).toMatchObject({ agent: 'bakend' });
   });
 
   test('the shim works from a nested cwd and via CLAUDE_PROJECT_DIR', async () => {
@@ -572,5 +585,131 @@ describe('fix round 2: refusals and path guards', () => {
     fs.symlinkSync('shared-ignore', p('.gitignore'));
     expect((await uninstall()).out).toMatch(/Nothing to do/);
     expect(planInstall({ kitDir: KIT, targetDir: target }).find((c) => c.path === '.gitignore').action).toBe('conflict');
+  });
+});
+
+describe('obsolete kit files', () => {
+  /** Pretend an older kit installed `rel` with `text`. */
+  const plantOld = (rel, text) => {
+    write(rel, text);
+    const m = JSON.parse(read('.team/kit-manifest.json'));
+    m.files[rel] = sha(text);
+    write('.team/kit-manifest.json', JSON.stringify(m, null, 2));
+  };
+
+  test('update deletes an untouched file the kit no longer ships and drops it from the manifest', async () => {
+    await install();
+    plantOld('.team/bin/lib/old-helper.mjs', 'old\n');
+    plantOld('.claude/agents/designer.md', 'old agent\n');
+    const plan = planInstall({ kitDir: KIT, targetDir: target });
+    expect(plan.find((c) => c.path === '.team/bin/lib/old-helper.mjs')).toMatchObject({ action: 'delete' });
+    expect(plan.find((c) => c.path === '.claude/agents/designer.md')).toMatchObject({ action: 'delete' });
+    const r = await install();
+    expect(r.code).toBe(0);
+    expect(r.out).toMatch(/^ {2}delete +\.team\/bin\/lib\/old-helper\.mjs$/m);
+    expect(exists('.team/bin/lib/old-helper.mjs')).toBe(false);
+    expect(exists('.claude/agents/designer.md')).toBe(false);
+    const files = JSON.parse(read('.team/kit-manifest.json')).files;
+    expect(Object.keys(files).sort()).toEqual(KIT_FILES);
+  });
+
+  test('a customised obsolete file is a conflict: y deletes, n and --yes keep', async () => {
+    await install();
+    plantOld('.team/bin/lib/old-helper.mjs', 'old\n');
+    write('.team/bin/lib/old-helper.mjs', 'my change\n');
+    const plan = planInstall({ kitDir: KIT, targetDir: target });
+    const c = plan.find((x) => x.path === '.team/bin/lib/old-helper.mjs');
+    expect(c).toMatchObject({ action: 'conflict' });
+    expect(c.content).toBeUndefined();
+    let r = await install();
+    expect(read('.team/bin/lib/old-helper.mjs')).toBe('my change\n');
+    r = await cli(['--target', target], { answers: ['y', 'n'] });
+    expect(r.questions).toEqual(['Apply these changes? (y/n)', 'Delete your customised .team/bin/lib/old-helper.mjs? (y/n)']);
+    expect(read('.team/bin/lib/old-helper.mjs')).toBe('my change\n');
+    r = await cli(['--target', target], { answers: ['y', 'y'] });
+    expect(r.code).toBe(0);
+    expect(exists('.team/bin/lib/old-helper.mjs')).toBe(false);
+  });
+
+  test('a missing obsolete file is dropped from the manifest silently', async () => {
+    await install();
+    plantOld('.team/bin/lib/gone.mjs', 'x\n');
+    fs.rmSync(p('.team/bin/lib/gone.mjs'));
+    const plan = planInstall({ kitDir: KIT, targetDir: target });
+    expect(plan.find((c) => c.path === '.team/bin/lib/gone.mjs')).toBeUndefined();
+    await install();
+    expect(JSON.parse(read('.team/kit-manifest.json')).files['.team/bin/lib/gone.mjs']).toBeUndefined();
+  });
+
+  test('uninstall deletes an untouched obsolete file and keeps a customised one with --yes', async () => {
+    await install();
+    plantOld('.team/bin/hooks/old.mjs', 'old\n');
+    plantOld('.claude/agents/designer.md', 'old agent\n');
+    write('.claude/agents/designer.md', 'mine now\n');
+    const plan = planUninstall({ targetDir: target });
+    expect(plan.find((c) => c.path === '.team/bin/hooks/old.mjs')).toMatchObject({ action: 'delete' });
+    expect(plan.find((c) => c.path === '.claude/agents/designer.md')).toMatchObject({ action: 'conflict' });
+    expect((await uninstall()).code).toBe(0);
+    expect(exists('.team/bin/hooks/old.mjs')).toBe(false);
+    expect(read('.claude/agents/designer.md')).toBe('mine now\n');
+  });
+
+  test('entries outside the kit install roots stay ignored on install and uninstall', async () => {
+    await install();
+    for (const rel of ['src/app.ts', '.team/team.json', '.team/handoffs/T-1-backend.md', '.claude/settings.local.json', '.claude/agents/../x.md', '.team/bin/../../y.md']) {
+      const m = JSON.parse(read('.team/kit-manifest.json'));
+      m.files[rel] = sha('');
+      write('.team/kit-manifest.json', JSON.stringify(m, null, 2));
+    }
+    write('src/app.ts', '');
+    write('.team/handoffs/T-1-backend.md', '');
+    write('.claude/settings.local.json', '');
+    write('x.md', '');
+    write('y.md', '');
+    const touched = (plan) => plan.map((c) => c.path).filter((x) => /app\.ts|T-1-backend|settings\.local|x\.md|y\.md/.test(x));
+    expect(touched(planInstall({ kitDir: KIT, targetDir: target }))).toEqual([]);
+    expect(touched(planUninstall({ targetDir: target }))).toEqual([]);
+    await install();
+    await uninstall();
+    for (const f of ['src/app.ts', '.team/handoffs/T-1-backend.md', '.claude/settings.local.json', 'x.md', 'y.md']) expect(exists(f), f).toBe(true);
+  });
+
+  test('a symlinked obsolete file is a symlink conflict and never deleted', async () => {
+    await install();
+    plantOld('.team/bin/lib/old.mjs', 'old\n');
+    fs.rmSync(p('.team/bin/lib/old.mjs'));
+    fs.writeFileSync(path.join(root, 'elsewhere.mjs'), 'old\n');
+    fs.symlinkSync(path.join(root, 'elsewhere.mjs'), p('.team/bin/lib/old.mjs'));
+    const plan = planInstall({ kitDir: KIT, targetDir: target });
+    expect(plan.find((c) => c.path === '.team/bin/lib/old.mjs')).toMatchObject({ action: 'conflict', symlink: true });
+    await install();
+    expect(fs.readFileSync(path.join(root, 'elsewhere.mjs'), 'utf8')).toBe('old\n');
+    expect(fs.lstatSync(p('.team/bin/lib/old.mjs')).isSymbolicLink()).toBe(true);
+  });
+});
+
+describe('formatDiff', () => {
+  test('shows - for the kit version, + for your copy, with a little context', () => {
+    const kit = 'a\nb\nc\nd\ne\nf\ng\nh\n';
+    const mine = 'a\nb\nc\nD\ne\nf\ng\nh\nextra\n';
+    expect(formatDiff(kit, mine)).toEqual([' b', ' c', '-d', '+D', ' e', ' f', ' g', ' h', '+extra']);
+  });
+  test('marks skipped unchanged lines between far-apart changes', () => {
+    const kit = Array.from({ length: 20 }, (_, i) => `l${i}`).join('\n');
+    const mine = kit.replace('l1\n', 'L1\n').replace('l18', 'L18');
+    const out = formatDiff(kit, mine);
+    expect(out).toContain('...');
+    expect(out).toEqual([' l0', '-l1', '+L1', ' l2', ' l3', '...', ' l16', ' l17', '-l18', '+L18', ' l19']);
+  });
+  test('identical texts give no lines', () => {
+    expect(formatDiff('same\n', 'same\n')).toEqual([]);
+  });
+  test('caps output at 40 lines with a note of how many were left out', () => {
+    const kit = Array.from({ length: 100 }, (_, i) => `k${i}`).join('\n');
+    const mine = Array.from({ length: 100 }, (_, i) => `m${i}`).join('\n');
+    const out = formatDiff(kit, mine);
+    expect(out).toHaveLength(40);
+    expect(out.at(-1)).toBe('... 161 more lines');
+    expect(out.slice(0, 39).every((l) => /^[-+]/.test(l))).toBe(true);
   });
 });

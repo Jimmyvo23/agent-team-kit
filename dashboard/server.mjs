@@ -2,7 +2,8 @@
 /**
  * Local office dashboard server. Folds `.team/events.jsonl` into TeamState,
  * serves it at GET /api/team (and writes agent-status.json), and serves the built UI.
- * Node built-ins only. The caller listens, on 127.0.0.1.
+ * Node built-ins only. The caller listens, on 127.0.0.1. Requests must carry Host
+ * 127.0.0.1:<port> or localhost:<port> (403 otherwise); every response is nosniff.
  */
 import fs from 'node:fs';
 import http from 'node:http';
@@ -72,7 +73,7 @@ export function createOfficeServer({ projectDir, distDir, now = () => new Date()
       writeStatusFile(state);
       sendJson(res, 200, state);
     } catch (err) {
-      sendJson(res, 500, { kind: 'events', error: `cannot read team activity: ${/** @type {Error} */ (err).message}`, hint: 'Check .team/events.jsonl and reload.' });
+      sendJson(res, 500, { kind: 'server', error: `cannot read team activity: ${/** @type {Error} */ (err).message}`, hint: 'Check .team/events.jsonl and reload.' });
     }
   }
 
@@ -132,7 +133,25 @@ export function createOfficeServer({ projectDir, distDir, now = () => new Date()
     return notFound(res);
   }
 
-  return http.createServer((req, res) => {
+  /**
+   * DNS-rebinding guard: a page on another site that rebinds its name to 127.0.0.1
+   * still sends its own Host, so only our own address and port are accepted.
+   * @param {string | undefined} host
+   * @param {http.Server} server
+   */
+  function isOwnHost(host, server) {
+    const addr = server.address();
+    if (!host || !addr || typeof addr === 'string') return false;
+    const h = host.toLowerCase();
+    return h === `127.0.0.1:${addr.port}` || h === `localhost:${addr.port}`;
+  }
+
+  const server = http.createServer((req, res) => {
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    if (!isOwnHost(req.headers.host, server)) {
+      res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
+      return void res.end('Forbidden: open the office at http://127.0.0.1');
+    }
     if (req.method !== 'GET') {
       res.writeHead(405, { Allow: 'GET', 'Content-Type': 'text/plain; charset=utf-8' });
       return void res.end('Method not allowed');
@@ -141,4 +160,5 @@ export function createOfficeServer({ projectDir, distDir, now = () => new Date()
     if (url.split(/[?#]/)[0] === '/api/team') return handleTeam(res);
     return handleStatic(url, res);
   });
+  return server;
 }

@@ -45,6 +45,35 @@ export function parseOfficeArgs(argv, { cwd }) {
   return { project, port };
 }
 
+/**
+ * Newest modification time (ms) of a file, or of every file under a folder; 0 when missing.
+ * @param {string} p
+ * @returns {number}
+ */
+function newestMtime(p) {
+  const st = fs.statSync(p, { throwIfNoEntry: false });
+  if (!st) return 0;
+  if (!st.isDirectory()) return st.mtimeMs;
+  let newest = 0;
+  for (const name of fs.readdirSync(p)) newest = Math.max(newest, newestMtime(path.join(p, name)));
+  return newest;
+}
+
+/**
+ * True when the dashboard must be (re)built: dist/index.html is missing, or a dashboard
+ * source (dashboard/src, dashboard/index.html, dashboard/vite.config.ts) is newer than it,
+ * for example after `git pull`.
+ * @param {string} distDir
+ * @param {string} kitDir
+ * @returns {boolean}
+ */
+export function needsBuild(distDir, kitDir) {
+  const built = fs.statSync(path.join(distDir, 'index.html'), { throwIfNoEntry: false });
+  if (!built) return true;
+  const sources = ['src', 'index.html', 'vite.config.ts'].map((f) => path.join(kitDir, 'dashboard', f));
+  return Math.max(...sources.map(newestMtime)) > built.mtimeMs;
+}
+
 /** Run `npm run build` in the kit folder and wait for it. @returns {Promise<void>} */
 function defaultBuild() {
   return new Promise((resolve, reject) => {
@@ -78,7 +107,7 @@ function defaultOpen(url) {
  * @param {string[]} argv
  * @param {{
  *   cwd: string, stdout: (s: string) => void, stderr: (s: string) => void,
- *   open?: (url: string) => void, build?: () => Promise<void> | void, distDir?: string,
+ *   open?: (url: string) => void, build?: () => Promise<void> | void, distDir?: string, kitDir?: string,
  *   onReady?: (info: { server: import('node:http').Server, url: string }) => void | Promise<void>,
  * }} io
  * @returns {Promise<number>} exit code, once the server has stopped
@@ -89,8 +118,8 @@ export async function main(argv, io) {
   if ('error' in parsed) return fail(parsed.error);
 
   const distDir = io.distDir ?? path.join(KIT_DIR, 'dashboard', 'dist');
-  if (!fs.existsSync(path.join(distDir, 'index.html'))) {
-    io.stdout('Building the office (first run only)...\n');
+  if (needsBuild(distDir, io.kitDir ?? KIT_DIR)) {
+    io.stdout('Building the office (first run, or the dashboard changed)...\n');
     try {
       await (io.build ?? defaultBuild)();
     } catch (e) {

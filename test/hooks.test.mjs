@@ -5,11 +5,12 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { mapHookInput } from '../hooks/record.mjs';
+import { validateEvent } from '../lib/events.mjs';
 
 const SCRIPT = fileURLToPath(new URL('../hooks/record.mjs', import.meta.url));
 const fxPath = (n) => fileURLToPath(new URL(`./fixtures/hooks/${n}.json`, import.meta.url));
 const fx = (n) => JSON.parse(fs.readFileSync(fxPath(n), 'utf8'));
-const KINDS = ['agent-start', 'agent-stop', 'tool'];
+const KINDS = ['agent-start', 'agent-stop', 'tool', 'turn-end'];
 
 test('maps start fixture to agent_start with the agent type as id', () => {
   expect(mapHookInput('agent-start', fx('subagent-start'))).toEqual({ type: 'agent_start', agent: 'spike-helper', source: 'hook' });
@@ -57,7 +58,7 @@ test('Bash action: env assignments skipped, flags and key=value args never inclu
 });
 test('Bash action: leading cd segments are skipped and never shown', () => {
   const act = (command) => mapHookInput('tool', { tool_name: 'Bash', tool_input: { command } })?.action ?? null;
-  expect(act('cd "/Users/x/Claude projects/kit trial" && node .team/bin/team-status.mjs status --agent backend')).toBe('Running node team-status.mjs');
+  expect(act('cd "/Users/x/Claude projects/kit trial" && node .team/bin/tool.mjs status --agent backend')).toBe('Running node tool.mjs');
   expect(act('cd /tmp; npm test')).toBe('Running npm test');
   expect(act('cd "a b" && cd c && git status')).toBe('Running git status');
   expect(act('cd "/Users/x/Claude projects"')).toBe('Running cd');
@@ -74,7 +75,7 @@ test('Bash action: a command word containing / shows only its basename', () => {
   const act = (command) => mapHookInput('tool', { tool_name: 'Bash', tool_input: { command } })?.action ?? null;
   expect(act('"/Users/x/Claude projects/bin/tool" run')).toBe('Running tool run');
   expect(act('./node_modules/.bin/vitest run')).toBe('Running vitest run');
-  expect(act('node .team/bin/team-status.mjs')).toBe('Running node team-status.mjs');
+  expect(act('node .team/bin/other.mjs')).toBe('Running node other.mjs');
 });
 test('Bash action: subshell/brace wrappers, pushd, guarded command word, second-word basename', () => {
   const act = (command) => mapHookInput('tool', { tool_name: 'Bash', tool_input: { command } })?.action ?? null;
@@ -110,12 +111,40 @@ test('missing fields or unrelated tools return null', () => {
 });
 test('agent tool fixtures return null for every kind', () => {
   for (const n of ['pre-agent', 'post-agent', 'post-agent-background']) {
-    for (const k of KINDS) expect(mapHookInput(k, fx(n)), `${n}/${k}`).toBeNull();
+    for (const k of KINDS.filter((x) => x !== 'turn-end')) expect(mapHookInput(k, fx(n)), `${n}/${k}`).toBeNull();
   }
 });
 test('garbage input and unknown kind return null', () => {
   for (const v of [null, undefined, 'x', 5, []]) for (const k of KINDS) expect(mapHookInput(k, v)).toBeNull();
   expect(mapHookInput('nope', fx('subagent-start'))).toBeNull();
+});
+
+test('Bash action: the team-status CLI is not recorded (it logs its own event)', () => {
+  const act = (command) => mapHookInput('tool', { tool_name: 'Bash', tool_input: { command } })?.action ?? null;
+  expect(act('node .team/bin/team-status.mjs status --agent backend --status working')).toBeNull();
+  expect(act('cd "/Users/x/Claude projects/kit trial" && node .team/bin/team-status.mjs task --id T-1')).toBeNull();
+  expect(act('node "/Users/x/Claude projects/p/.team/bin/team-status.mjs" handoff')).toBeNull();
+  expect(act('node team-status.mjs')).toBeNull();
+  expect(act('cat team-status.mjs')).toBe('Running cat team-status.mjs');
+  expect(act('node other.mjs')).toBe('Running node other.mjs');
+});
+test('Bash action: a second word with @ or : is dropped', () => {
+  const act = (command) => mapHookInput('tool', { tool_name: 'Bash', tool_input: { command } })?.action ?? null;
+  expect(act('curl https://user:pass@example.com')).toBe('Running curl');
+  expect(act('ssh admin@host')).toBe('Running ssh');
+  expect(act('docker pull repo:tag')).toBe('Running docker pull');
+  expect(act('psql postgres://u:p@h/db')).toBe('Running psql');
+});
+test('MultiEdit and NotebookEdit show the edited file basename', () => {
+  expect(mapHookInput('tool', { tool_name: 'MultiEdit', tool_input: { file_path: '/a/b/pricing.ts' } })).toEqual({ type: 'tool_use', agent: 'planner', action: 'Editing pricing.ts', source: 'hook' });
+  expect(mapHookInput('tool', { tool_name: 'NotebookEdit', tool_input: { notebook_path: '/a/My Notes.ipynb' } })?.action).toBe('Editing My Notes.ipynb');
+  expect(mapHookInput('tool', { tool_name: 'NotebookEdit', tool_input: { file_path: '/a/x.ipynb' } })).toBeNull();
+});
+test('turn-end (Stop hook) maps to a hook-sourced planner idle status', () => {
+  const stop = { session_id: 's', transcript_path: '/t.jsonl', cwd: '/p', hook_event_name: 'Stop', stop_hook_active: false };
+  expect(mapHookInput('turn-end', stop)).toEqual({ type: 'status', agent: 'planner', status: 'idle', source: 'hook' });
+  expect(mapHookInput('turn-end', {})).toEqual({ type: 'status', agent: 'planner', status: 'idle', source: 'hook' });
+  expect(validateEvent(mapHookInput('turn-end', stop))).toEqual({ ok: true });
 });
 
 // ---- CLI ----
@@ -153,6 +182,11 @@ test('CLI: valid fixture in a path with a space appends exactly one event', () =
   expect(ev).toHaveLength(1);
   expect(ev[0]).toMatchObject({ type: 'tool_use', agent: 'spike-helper', action: 'Running echo hi', source: 'hook' });
 });
+test('CLI: turn-end appends a hook-sourced planner idle', () => {
+  const dir = proj(); fs.mkdirSync(path.join(dir, '.team'), { recursive: true });
+  silent(spawn('turn-end', JSON.stringify({ hook_event_name: 'Stop', stop_hook_active: false }), { CLAUDE_PROJECT_DIR: dir }));
+  expect(events(dir)).toMatchObject([{ type: 'status', agent: 'planner', status: 'idle', source: 'hook' }]);
+});
 test('CLI: ignored fixture appends nothing', () => {
   const dir = proj(); fs.mkdirSync(path.join(dir, '.team'), { recursive: true });
   silent(spawn('tool', JSON.stringify(fx('post-agent')), { CLAUDE_PROJECT_DIR: dir }));
@@ -169,14 +203,15 @@ test('CLI: runs when invoked through a symlink (path with a space)', () => {
 });
 
 // ---- template ----
-test('templates/hooks.json has the three events with quoted command paths', () => {
+test('templates/hooks.json has the four events with quoted command paths', () => {
   const h = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../templates/hooks.json', import.meta.url)), 'utf8'));
-  expect(Object.keys(h).sort()).toEqual(['PostToolUse', 'SubagentStart', 'SubagentStop']);
+  expect(Object.keys(h).sort()).toEqual(['PostToolUse', 'Stop', 'SubagentStart', 'SubagentStop']);
   const cmd = (ev) => h[ev].flatMap((g) => g.hooks.map((x) => x.command));
   const want = (k) => `node "$CLAUDE_PROJECT_DIR/.team/bin/hooks/record.mjs" ${k}`;
   expect(cmd('SubagentStart')).toEqual([want('agent-start')]);
   expect(cmd('SubagentStop')).toEqual([want('agent-stop')]);
   expect(cmd('PostToolUse')).toEqual([want('tool')]);
-  expect(h.PostToolUse[0].matcher).toBe('Edit|Write|Bash');
+  expect(cmd('Stop')).toEqual([want('turn-end')]);
+  expect(h.PostToolUse[0].matcher).toBe('Edit|Write|MultiEdit|NotebookEdit|Bash');
   for (const ev of Object.keys(h)) for (const g of h[ev]) for (const x of g.hooks) expect(x.type).toBe('command');
 });
