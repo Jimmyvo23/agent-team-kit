@@ -21,7 +21,15 @@ export async function startOffice(fixture: string): Promise<Office> {
   const projectDir = path.join(tmp, fixture);
   fs.cpSync(path.join(repoRoot, 'test', 'fixtures', 'projects', fixture), projectDir, { recursive: true });
   const server = createOfficeServer({ projectDir, distDir: DIST_DIR, now: fixtureClock() });
-  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  try {
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, '127.0.0.1', () => { server.off('error', reject); resolve(); });
+    });
+  } catch (err) {
+    fs.rmSync(tmp, { recursive: true, force: true });
+    throw err;
+  }
   const { port } = server.address() as AddressInfo;
   return {
     url: `http://127.0.0.1:${port}/`,

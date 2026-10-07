@@ -1,7 +1,8 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import type { AgentState } from '../types';
 import { Room } from './Room';
 import { PreviewCard } from './PreviewCard';
+import { orderRooms } from '../rooms';
 
 export interface BuildingProps {
   project: string;
@@ -19,9 +20,25 @@ export interface BuildingProps {
   lobby?: ReactNode;
 }
 
+/** Same breakpoint as office.css: rooms go two across on phones. */
+const TWO_COLUMNS = '(max-width: 760px)';
+
+function useColumns(): number {
+  const query = () => (window.matchMedia(TWO_COLUMNS).matches ? 2 : 3);
+  const [columns, setColumns] = useState(query);
+  useEffect(() => {
+    const mq = window.matchMedia(TWO_COLUMNS);
+    const update = () => setColumns(mq.matches ? 2 : 3);
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
+  return columns;
+}
+
 /** The cutaway building: roof with the project name, then one room per agent. */
 export function Building({ project, agents, selectedId, pendingApprovals, onSelect, plaques, sign, ceiling, lobby }: BuildingProps) {
   const [previewId, setPreviewId] = useState<string | null>(null);
+  const rooms = orderRooms(agents, useColumns());
 
   return (
     <section className="building" aria-label="Office">
@@ -29,7 +46,7 @@ export function Building({ project, agents, selectedId, pendingApprovals, onSele
       <h1 className="roof">{`${project} team`}</h1>
       <div className="house">
         {ceiling}
-        {agents.map((agent) => {
+        {rooms.map((agent) => {
           const showPreview = previewId === agent.id;
           const cardId = `preview-${agent.id}`;
           return (

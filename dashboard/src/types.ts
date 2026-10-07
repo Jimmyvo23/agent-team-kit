@@ -80,6 +80,8 @@ export interface TeamState {
 
 /** Body of a 500 from /api/team (for example an invalid team.json). */
 export interface TeamError {
+  /** 'team': team.json is missing or invalid. 'server': any other failure of the office server. */
+  kind: 'team' | 'server';
   error: string;
   hint: string;
 }

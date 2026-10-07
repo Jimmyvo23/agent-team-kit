@@ -20,7 +20,7 @@ const office$ = (page: import('@playwright/test').Page) => page.getByRole('regio
 test('renders one room per agent with the project on the roof', async ({ page }) => {
   await page.goto(office.url);
   await expect(page.getByText('CookNeighbour team', { exact: true })).toBeVisible();
-  await expect(office$(page).getByRole('button')).toHaveCount(6);
+  await expect(office$(page).locator('[data-agent]')).toHaveCount(6);
 });
 
 test('room label uses the plain state wording', async ({ page }) => {
@@ -33,7 +33,7 @@ test('room label uses the plain state wording', async ({ page }) => {
 
 test('approver gets the top-right room with one sheet per pending approval', async ({ page }) => {
   await page.goto(office.url);
-  const rooms = office$(page).getByRole('button');
+  const rooms = office$(page).locator('[data-agent]');
   const jimmy = page.getByRole('button', { name: /^Jimmy:/ });
   const jimmyBox = (await jimmy.boundingBox())!;
   for (const room of await rooms.all()) {
@@ -78,6 +78,8 @@ test('clipboard shows the reason when an agent is stuck', async ({ page }) => {
 test('keyboard: Tab to a room and press Enter pins it', async ({ page }) => {
   await page.goto(office.url);
   await expect(page.getByRole('button', { name: /^Planner:/ })).toBeVisible();
+  // Start keyboard navigation from the roof; the toolbar and the needs-you sign come before it.
+  await page.getByText('CookNeighbour team', { exact: true }).click();
   await page.keyboard.press('Tab');
   await expect(page.getByRole('button', { name: /^Planner:/ })).toBeFocused();
   await page.keyboard.press('Enter');

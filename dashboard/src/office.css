@@ -18,18 +18,48 @@ body {
   background: linear-gradient(var(--sky) 0, var(--sky-2) 480px);
 }
 
-.scene-message {
-  max-width: 560px;
-  margin: 15vh auto 0;
-  padding: 24px;
-  background: var(--paper);
-  border: 3px solid var(--ink);
-  border-radius: 10px;
-  box-shadow: var(--hard-shadow);
-  line-height: 1.5;
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
 }
-.scene-message h1 { margin: 0 0 8px; font-size: 24px; font-weight: 800; }
-.scene-message p { margin: 0 0 6px; }
+
+.scene-opening { margin: 15vh 0 0; text-align: center; font-weight: 600; }
+
+/* Toolbar: theme and view switches, top right. Stays above the status overlay. */
+.toolbar {
+  position: relative;
+  z-index: 11;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+  max-width: 1120px;
+  margin: 0 auto 4px;
+}
+.theme-toggle, .view-toggle {
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  border-radius: 20px;
+  font: 600 13px/1 var(--font);
+  color: var(--ink);
+}
+.theme-toggle { display: flex; padding: 2px; }
+.theme-toggle label { position: relative; padding: 5px 10px; border-radius: 16px; cursor: pointer; }
+.theme-toggle label.is-on { background: var(--ink); color: var(--paper); }
+.theme-toggle input { position: absolute; inset: 0; margin: 0; opacity: 0; cursor: pointer; }
+.theme-toggle label:has(input:focus-visible) { outline: 3px solid var(--ink); outline-offset: 2px; }
+.view-toggle { padding: 7px 14px; cursor: pointer; }
+.view-toggle:focus-visible, .needs-sign:focus-visible, .lobby-more:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 3px;
+}
 
 /* Clouds */
 .cloud {
@@ -79,7 +109,75 @@ body {
   border-top: 4px solid var(--grass-2);
 }
 
-.sign-slot { position: relative; min-height: 54px; }
+.sign-slot { position: relative; min-height: 54px; display: flex; justify-content: flex-end; align-items: flex-start; }
+
+/* Needs-you sign, hanging from the roof on two strings */
+.needs-sign {
+  position: relative;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  align-items: baseline;
+  max-width: min(100%, 560px);
+  margin: 12px 4% 0 0;
+  padding: 4px 12px;
+  background: var(--approval);
+  border: 3px solid var(--ink);
+  border-radius: 10px;
+  color: var(--ink);
+  font: 800 14px/1.3 var(--font);
+  text-align: left;
+  cursor: pointer;
+  transform-origin: top center;
+}
+.needs-sign::before, .needs-sign::after {
+  content: '';
+  position: absolute;
+  top: -15px;
+  width: 2px;
+  height: 12px;
+  background: var(--ink);
+}
+.needs-sign::before { left: 18px; }
+.needs-sign::after { right: 18px; }
+.needs-sign-summary { min-width: 0; font-size: 12px; font-weight: 600; }
+
+/* Mail tube along the ceiling; a folder rides it from sender to receiver */
+.mail-tube {
+  position: absolute;
+  top: 3px;
+  left: 6px;
+  right: 6px;
+  z-index: 3;
+  height: 12px;
+  pointer-events: none;
+  background: var(--tube-glass);
+  border: 2px solid var(--ink);
+  border-radius: 8px;
+}
+.mail-folder {
+  position: absolute;
+  top: -5px;
+  left: var(--to);
+  width: 22px;
+  height: 16px;
+  opacity: 0;
+  background: var(--approval);
+  border: 2px solid var(--ink);
+  border-radius: 3px;
+}
+.mail-folder::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: 2px;
+  width: 9px;
+  height: 5px;
+  background: var(--approval);
+  border: 2px solid var(--ink);
+  border-bottom: 0;
+  border-radius: 2px 2px 0 0;
+}
 
 .roof {
   width: 92%;
@@ -118,7 +216,6 @@ body {
   overflow: hidden;
   background: var(--wall);
   cursor: pointer;
-  transition: filter 0.4s;
 }
 .room::after {
   content: '';
@@ -182,6 +279,19 @@ body {
   border: 2px solid var(--ink);
   border-radius: 12px;
   font-size: 16px;
+  font-weight: 800;
+}
+.room-slot-approver .room-bubble { top: 18px; }
+.room-plaque-news { background: var(--approval); }
+.room-hot-desk {
+  position: absolute;
+  top: 22px;
+  right: 10px;
+  padding: 0 6px;
+  background: var(--paper);
+  border: 2px dashed var(--ink);
+  border-radius: 4px;
+  font-size: 11px;
   font-weight: 800;
 }
 .room-door {
@@ -361,6 +471,119 @@ body {
 .clipboard-quiet { margin: 0; }
 .clipboard-updated { margin: 6px 0 0; opacity: 0.75; }
 
+/* Lobby: the ground floor, with the task board on its wall */
+.lobby {
+  position: relative;
+  padding: 12px 12px 32px;
+  background: var(--lobby);
+  border: 6px solid var(--frame);
+  border-top: 0;
+  border-radius: 0 0 6px 6px;
+}
+.lobby-board {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  padding: 10px;
+  background: var(--paper);
+  border: 3px solid var(--ink);
+  border-radius: 8px;
+}
+.lobby-column h3 {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin: 0 0 6px;
+  font-size: 13px;
+  font-weight: 800;
+}
+.lobby-count {
+  padding: 0 7px;
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.lobby-column ul { margin: 0; padding: 0; list-style: none; }
+.ticket {
+  margin-bottom: 6px;
+  padding: 4px 7px;
+  background: var(--paper);
+  border: 2px solid var(--ink);
+  border-left: 8px solid var(--owner);
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.ticket-owner { display: block; font-size: 11px; opacity: 0.75; }
+.lobby-more {
+  padding: 2px 0;
+  background: none;
+  border: 0;
+  color: var(--ink);
+  font: 700 12px var(--font);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.lobby-floor {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 22px;
+  padding-left: 10px;
+  background: var(--wood);
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 22px;
+}
+
+/* List view: plain text on a sheet of paper */
+.list-view {
+  position: relative;
+  z-index: 1;
+  max-width: 720px;
+  margin: 8px auto 0;
+  padding: 16px 20px 20px;
+  background: var(--paper);
+  border: 3px solid var(--ink);
+  border-radius: 10px;
+  box-shadow: var(--hard-shadow);
+  font-size: 15px;
+  line-height: 1.5;
+}
+.list-view h1 { margin: 0; font-size: 24px; font-weight: 800; }
+.list-view h2 { margin: 18px 0 4px; font-size: 17px; font-weight: 800; }
+.list-view h3 { margin: 8px 0 2px; font-size: 14px; font-weight: 800; }
+.list-view ul { margin: 0; padding-left: 20px; }
+.list-view p { margin: 0; }
+
+/* Overlay when the server cannot give a fresh state; the last state shows through */
+.status-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: start center;
+  padding: 16vh 16px 16px;
+  background: var(--overlay);
+}
+.status-card {
+  max-width: 520px;
+  padding: 20px 24px;
+  background: var(--paper);
+  border: 3px solid var(--ink);
+  border-left: 12px solid var(--approval);
+  border-radius: 10px;
+  box-shadow: var(--hard-shadow);
+  line-height: 1.5;
+}
+.status-card-problem { border-left-color: var(--alert); }
+.status-card h2 { margin: 0 0 8px; font-size: 22px; font-weight: 800; line-height: 1.2; }
+.status-card p { margin: 0 0 6px; overflow-wrap: anywhere; }
+.status-hint { font-weight: 600; }
+
 /* Phones: rooms two across, clipboard under the building */
 @media (max-width: 760px) {
   .office { grid-template-columns: minmax(0, 1fr); }
@@ -368,6 +591,8 @@ body {
   .clipboard { margin-top: 8px; }
   .roof { font-size: 15px; }
   .room-plaque { max-width: calc(100% - 16px); font-size: 10px; }
+  .lobby-board { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .needs-sign { margin-right: 0; }
 }
 
 /*
@@ -375,8 +600,15 @@ body {
  * Everything animated lives inside this block, so reduced motion turns all of it off.
  */
 @media (prefers-reduced-motion: no-preference) {
+  .room { transition: filter 0.4s; }
   .cloud { animation: drift 70s linear infinite; }
   .cloud-far { animation-duration: 100s; animation-delay: -45s; }
+
+  /* The sign sways when it appears or its count changes, then hangs still. */
+  .needs-sign { animation: swing 1.6s ease-in-out 2; }
+  /* A handoff: the folder rides the tube once; the receiver's plaque pops. */
+  .mail-folder { animation: tube-send 2.8s ease-in-out; }
+  .room-plaque-news { animation: plaque-pop 0.5s ease-out; }
 
   .state-working .arm-left { transform-box: fill-box; transform-origin: top right; animation: tap 0.3s infinite alternate; }
   .state-working .arm-right { transform-box: fill-box; transform-origin: top left; animation: tap 0.3s infinite alternate-reverse; }
@@ -394,3 +626,11 @@ body {
 @keyframes tap { from { transform: rotate(0); } to { transform: rotate(-10deg); } }
 @keyframes wave { from { transform: rotate(-8deg); } to { transform: rotate(20deg); } }
 @keyframes steam { 0% { opacity: 0; transform: translateY(0); } 40% { opacity: 0.8; } 100% { opacity: 0; transform: translateY(-12px); } }
+@keyframes swing { 0%, 100% { transform: rotate(-1.5deg); } 50% { transform: rotate(1.5deg); } }
+@keyframes tube-send {
+  0% { left: var(--from); opacity: 0; }
+  12% { left: var(--from); opacity: 1; }
+  80% { left: var(--to); opacity: 1; }
+  100% { left: var(--to); opacity: 0; }
+}
+@keyframes plaque-pop { from { transform: scale(1.25); } to { transform: scale(1); } }

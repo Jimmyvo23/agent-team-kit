@@ -93,6 +93,7 @@ describe('GET /api/team', () => {
     const body = await res.json();
     expect(body.hint).toBe('Fix .team/team.json and this page will reload.');
     expect(body.error).toMatch(/JSON/);
+    expect(body.kind).toBe('team');
   });
 
   it('reflects an event appended between two requests', async () => {
