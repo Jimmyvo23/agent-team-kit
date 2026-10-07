@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
-import { main, parseOfficeArgs } from '../scripts/office.mjs';
+import { main, needsBuild, parseOfficeArgs } from '../scripts/office.mjs';
 
 const FIXTURES = path.join(import.meta.dirname, 'fixtures', 'projects');
 /** @type {string[]} */
@@ -67,7 +67,58 @@ describe('parseOfficeArgs', () => {
   });
 });
 
+/** A fake kit folder with dashboard sources, all dated `at` (seconds). */
+function fakeKit(at) {
+  const kit = tmp();
+  const files = ['dashboard/index.html', 'dashboard/vite.config.ts', 'dashboard/src/App.tsx', 'dashboard/src/components/Room.tsx'];
+  for (const f of files) {
+    fs.mkdirSync(path.dirname(path.join(kit, f)), { recursive: true });
+    fs.writeFileSync(path.join(kit, f), 'x');
+    fs.utimesSync(path.join(kit, f), at, at);
+  }
+  return kit;
+}
+function distAt(at) {
+  const d = tmp();
+  fs.writeFileSync(path.join(d, 'index.html'), 'built');
+  fs.utimesSync(path.join(d, 'index.html'), at, at);
+  return d;
+}
+
+describe('needsBuild', () => {
+  const T = 1_700_000_000;
+  it('is true when dist/index.html is missing', () => {
+    expect(needsBuild(path.join(tmp(), 'dist'), fakeKit(T))).toBe(true);
+  });
+  it('is false when the build is newer than every source', () => {
+    expect(needsBuild(distAt(T + 10), fakeKit(T))).toBe(false);
+  });
+  it.each(['dashboard/src/components/Room.tsx', 'dashboard/src/App.tsx', 'dashboard/index.html', 'dashboard/vite.config.ts'])('is true when %s is newer than the build', (f) => {
+    const kit = fakeKit(T);
+    fs.utimesSync(path.join(kit, f), T + 20, T + 20);
+    expect(needsBuild(distAt(T + 10), kit)).toBe(true);
+  });
+  it('ignores missing source files', () => {
+    expect(needsBuild(distAt(T + 10), tmp())).toBe(false);
+  });
+});
+
 describe('main', () => {
+  it('rebuilds when a dashboard source is newer than the build', async () => {
+    const T = 1_700_000_000;
+    const kitDir = fakeKit(T + 20);
+    const distDir = distAt(T);
+    const out = sink();
+    const build = vi.fn(async () => { fs.utimesSync(path.join(distDir, 'index.html'), T + 30, T + 30); });
+    const code = await main(['--project', busyCopy(), '--port', String(await freePort())], {
+      cwd: '/x', stdout: out.write, stderr: () => {}, open: () => {}, build, distDir, kitDir,
+      onReady: ({ server }) => { server.closeAllConnections(); server.close(); },
+    });
+    expect(code).toBe(0);
+    expect(build).toHaveBeenCalledTimes(1);
+    expect(out.text()).toMatch(/Building the office/);
+  });
+
   it('builds only when dist is missing, serves /api/team, prints the URL and opens it', async () => {
     const project = busyCopy();
     const port = await freePort();
@@ -77,7 +128,7 @@ describe('main', () => {
     const build = vi.fn();
     let status;
     const code = await main(['--project', project, '--port', String(port)], {
-      cwd: '/x', stdout: out.write, stderr: err.write, open, build, distDir: distWithIndex(),
+      cwd: '/x', stdout: out.write, stderr: err.write, open, build, distDir: distWithIndex(), kitDir: fakeKit(1_700_000_000),
       onReady: async ({ server, url }) => {
         status = (await fetch(`${url}/api/team`)).status;
         server.closeAllConnections();
