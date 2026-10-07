@@ -55,25 +55,41 @@ function splitSegments(command) {
   return segments;
 }
 
+/** @param {string} w */
+const baseName = (w) => (w.includes('/') ? w.split('/').filter(Boolean).pop() || w : w);
+
+/** Drop wrapper syntax ( $( { before the command and ) } after it, and VAR=value words. @param {string[]} words */
+function cleanSegment(words) {
+  const w = words.filter(Boolean);
+  for (;;) {
+    if (!w.length) break;
+    w[0] = w[0].replace(/^(?:\$\(|[({])+/, '');
+    if (!w[0]) { w.shift(); continue; }
+    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(w[0])) { w.shift(); continue; }
+    break;
+  }
+  return w.map((x) => x.replace(/[)}]+$/, '')).filter(Boolean);
+}
+
 /**
- * Describe a Bash command for the dashboard. Leading `cd` segments are skipped (their
- * paths are never shown); leading VAR=value words are skipped; a second word is added
- * only if it cannot carry a secret (no '=', no leading '-', no whitespace).
+ * Describe a Bash command for the dashboard. Leading directory changes (cd, pushd, popd)
+ * are skipped and their arguments never shown; wrappers and VAR=value words are skipped;
+ * the command word is shown as a basename; a second word (basename) is added only if it
+ * cannot carry a secret (no '=', no leading '-', no whitespace).
  * @param {string} command
  * @returns {string}
  */
 function describeBash(command) {
-  const segments = splitSegments(command).map((words) => {
-    const w = [...words];
-    while (w.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(w[0])) w.shift();
-    return w;
-  }).filter((w) => w.length);
+  const segments = splitSegments(command).map(cleanSegment).filter((w) => w.length);
   if (!segments.length) return '';
-  const first = segments.find((w) => w[0] !== 'cd');
-  if (!first) return 'Running cd';
-  const next = first[1];
-  const sub = next && !next.includes('=') && !next.startsWith('-') && !/\s/.test(next) ? ` ${next}` : '';
-  const cmd = first[0].includes('/') ? first[0].split('/').filter(Boolean).pop() || first[0] : first[0];
+  const isDir = (/** @type {string[]} */ w) => ['cd', 'pushd', 'popd'].includes(w[0]);
+  const first = segments.find((w) => !isDir(w));
+  if (!first) return `Running ${segments[0][0]}`;
+  const cmd = baseName(first[0]);
+  if (/\s/.test(cmd) || cmd.includes('=') || cmd.startsWith('-')) return 'Running a command';
+  const raw = first[1];
+  const next = raw && !raw.includes('=') && !raw.startsWith('-') ? baseName(raw) : '';
+  const sub = next && !/\s/.test(next) ? ` ${next}` : '';
   return `Running ${cmd}${sub}`;
 }
 
