@@ -10,6 +10,90 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const str = (v) => (typeof v === 'string' ? v : '');
 
 /**
+ * Split a shell command into top-level segments (on && || ; newline, outside quotes),
+ * each a list of words with surrounding quotes removed. Empty segments are dropped.
+ * @param {string} command
+ * @returns {string[][]}
+ */
+function splitSegments(command) {
+  /** @type {string[][]} */ const segments = [];
+  /** @type {string[]} */ let words = [];
+  let word = '';
+  let inWord = false;
+  /** @type {string} */ let quote = '';
+  const endWord = () => {
+    if (inWord) words.push(word);
+    word = '';
+    inWord = false;
+  };
+  const endSegment = () => {
+    endWord();
+    if (words.length) segments.push(words);
+    words = [];
+  };
+  for (let i = 0; i < command.length; i++) {
+    const c = command[i];
+    if (quote) {
+      if (c === quote) quote = '';
+      else word += c;
+    } else if (c === '"' || c === "'") {
+      quote = c;
+      inWord = true;
+    } else if (c === ';' || c === '\n' || c === '\r') {
+      endSegment();
+    } else if ((c === '&' || c === '|') && command[i + 1] === c) {
+      endSegment();
+      i++;
+    } else if (/\s/.test(c)) {
+      endWord();
+    } else {
+      word += c;
+      inWord = true;
+    }
+  }
+  endSegment();
+  return segments;
+}
+
+/** @param {string} w */
+const baseName = (w) => (w.includes('/') ? w.split('/').filter(Boolean).pop() || w : w);
+
+/** Drop wrapper syntax ( $( { before the command and ) } after it, and VAR=value words. @param {string[]} words */
+function cleanSegment(words) {
+  const w = words.filter(Boolean);
+  for (;;) {
+    if (!w.length) break;
+    w[0] = w[0].replace(/^(?:\$\(|[({])+/, '');
+    if (!w[0]) { w.shift(); continue; }
+    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(w[0])) { w.shift(); continue; }
+    break;
+  }
+  return w.map((x) => x.replace(/[)}]+$/, '')).filter(Boolean);
+}
+
+/**
+ * Describe a Bash command for the dashboard. Leading directory changes (cd, pushd, popd)
+ * are skipped and their arguments never shown; wrappers and VAR=value words are skipped;
+ * the command word is shown as a basename; a second word (basename) is added only if it
+ * cannot carry a secret (no '=', no leading '-', no whitespace).
+ * @param {string} command
+ * @returns {string}
+ */
+function describeBash(command) {
+  const segments = splitSegments(command).map(cleanSegment).filter((w) => w.length);
+  if (!segments.length) return '';
+  const isDir = (/** @type {string[]} */ w) => ['cd', 'pushd', 'popd'].includes(w[0]);
+  const first = segments.find((w) => !isDir(w));
+  if (!first) return `Running ${segments[0][0]}`;
+  const cmd = baseName(first[0]);
+  if (/\s/.test(cmd) || cmd.includes('=') || cmd.startsWith('-')) return 'Running a command';
+  const raw = first[1];
+  const next = raw && !raw.includes('=') && !raw.startsWith('-') ? baseName(raw) : '';
+  const sub = next && !/\s/.test(next) ? ` ${next}` : '';
+  return `Running ${cmd}${sub}`;
+}
+
+/**
  * Pure mapping from a hook input to a kit event, or null to ignore.
  * @param {string} kind
  * @param {any} input
@@ -29,14 +113,7 @@ export function mapHookInput(kind, input) {
     const base = str(ti.file_path).split(/[\\/]/).filter(Boolean).pop();
     if (base) action = `Editing ${base}`;
   } else if (input.tool_name === 'Bash') {
-    // Skip leading VAR=value words; add a second word only if it cannot carry a secret (no '=', no leading '-').
-    const words = str(ti.command).trim().split(/\s+/).filter(Boolean);
-    while (words.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(words[0])) words.shift();
-    if (words.length) {
-      const next = words[1];
-      const sub = next && !next.includes('=') && !next.startsWith('-') ? ` ${next}` : '';
-      action = `Running ${words[0]}${sub}`;
-    }
+    action = describeBash(str(ti.command));
   }
   if (!action) return null;
   if (action.length > 120) action = `${action.slice(0, 119)}\u2026`;
