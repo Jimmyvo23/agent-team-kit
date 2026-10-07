@@ -230,3 +230,55 @@ describe('static files', () => {
     }
   });
 });
+
+describe('hardening', () => {
+  /** Raw GET with a chosen Host header (fetch does not allow overriding Host). */
+  const rawGet = (base, p, host) => new Promise((resolve, reject) => {
+    const u = new URL(base);
+    const headers = host === undefined ? {} : { Host: host };
+    http.get({ host: u.hostname, port: u.port, path: p, headers, setHost: host === undefined }, (res) => {
+      let body = ''; res.on('data', (c) => (body += c)); res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body }));
+    }).on('error', reject);
+  });
+
+  it('refuses requests whose Host is not 127.0.0.1 or localhost on the bound port (DNS rebinding)', async () => {
+    const base = await start({ projectDir: copyFixture('busy'), distDir: distWith({ 'index.html': 'x' }) });
+    const port = new URL(base).port;
+    for (const host of ['evil.example:' + port, `127.0.0.1:${Number(port) + 1}`, 'localhost', '127.0.0.1', `attacker.localhost:${port}`, '']) {
+      for (const p of ['/api/team', '/']) {
+        const res = await rawGet(base, p, host);
+        expect(res.status, `${host} ${p}`).toBe(403);
+        expect(res.body).not.toContain('agents');
+        expect(res.headers['x-content-type-options']).toBe('nosniff');
+      }
+    }
+    for (const host of [`127.0.0.1:${port}`, `localhost:${port}`, `LOCALHOST:${port}`]) {
+      expect((await rawGet(base, '/api/team', host)).status, host).toBe(200);
+    }
+  });
+
+  it('sends X-Content-Type-Options: nosniff on every response', async () => {
+    const projectDir = copyFixture('busy');
+    const base = await start({ projectDir, distDir: distWith({ 'index.html': 'x', 'a.js': 'x' }) });
+    for (const p of ['/api/team', '/', '/a.js']) {
+      expect((await fetch(base + p)).headers.get('x-content-type-options'), p).toBe('nosniff');
+    }
+    expect((await fetch(base, { method: 'POST' })).headers.get('x-content-type-options')).toBe('nosniff');
+    const noDist = await start({ projectDir: copyFixture('empty'), distDir: path.join(tmp(), 'none') });
+    expect((await fetch(`${noDist}/x`)).headers.get('x-content-type-options')).toBe('nosniff');
+    const bad = await start({ projectDir: copyFixture('bad-team'), distDir: path.join(tmp(), 'none') });
+    expect((await fetch(`${bad}/api/team`)).headers.get('x-content-type-options')).toBe('nosniff');
+  });
+
+  it('answers 500 with kind "server" when the activity log cannot be read', async () => {
+    const projectDir = copyFixture('empty');
+    fs.mkdirSync(path.join(projectDir, '.team', 'events.jsonl')); // a folder: reading it fails
+    const base = await start({ projectDir, distDir: path.join(projectDir, 'nodist'), rotate: () => {} });
+    const res = await fetch(`${base}/api/team`);
+    expect(res.status).toBe(500);
+    const body = await res.json();
+    expect(body.kind).toBe('server');
+    expect(body.error).toMatch(/cannot read team activity/);
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+  });
+});
