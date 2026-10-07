@@ -211,3 +211,55 @@ test('every agent carries its normalized id, including approver and visitors', (
   expect(s.agents.map((a) => a.id)).toEqual(['planner', 'backend', 'frontend', 'tester', 'reviewer', 'jimmy', 'guest']);
   expect(s.agents.at(-1).isVisitor).toBe(true);
 });
+
+test('agent_stop keeps a blocked or waiting agent in that state', () => {
+  const s = build([ev('agent_start', { agent: 'backend', task: 'T-4' }), ev('status', { agent: 'backend', status: 'blocked', reason: 'CI failing', progress: 40 }), ev('agent_stop', { agent: 'backend', source: 'hook' })]);
+  expect(agent(s, 'backend')).toMatchObject({ status: 'blocked', reason: 'CI failing', stoppedAtProgress: 40 });
+  expect(s.needsYou).toEqual([{ kind: 'blocked', id: 'backend', summary: 'CI failing' }]);
+  const w = build([ev('agent_start', { agent: 'tester' }), ev('status', { agent: 'tester', status: 'awaiting_approval' }), ev('agent_stop', { agent: 'tester' })]);
+  expect(agent(w, 'tester').status).toBe('awaiting_approval');
+  const again = build([ev('status', { agent: 'backend', status: 'blocked', reason: 'CI failing' }), ev('agent_stop', { agent: 'backend' }), ev('agent_start', { agent: 'backend' })]);
+  expect(agent(again, 'backend')).toMatchObject({ status: 'working', reason: null });
+  expect(again.needsYou).toEqual([]);
+});
+
+test('hook-sourced planner idle applies only while the planner is working', () => {
+  const idle = ev('status', { agent: 'planner', status: 'idle', source: 'hook' });
+  const working = build([ev('status', { agent: 'planner', status: 'working', task: 'WO-2' }), idle]);
+  expect(agent(working, 'planner').status).toBe('idle');
+  for (const before of [
+    ev('status', { agent: 'planner', status: 'blocked', reason: 'Need Jimmy' }),
+    ev('status', { agent: 'planner', status: 'awaiting_approval' }),
+    ev('status', { agent: 'planner', status: 'done' }),
+  ]) {
+    const s = build([before, { ...idle, time: new Date(lastTime() + 500).toISOString() }]);
+    expect(agent(s, 'planner').status).toBe(before.status);
+  }
+  const untouched = build([idle]);
+  expect(agent(untouched, 'planner')).toMatchObject({ status: 'idle', updatedAt: null });
+  expect(untouched.log).toEqual([]);
+  const cli = build([ev('status', { agent: 'planner', status: 'blocked', reason: 'x' }), ev('status', { agent: 'planner', status: 'idle' })]);
+  expect(agent(cli, 'planner').status).toBe('idle');
+});
+
+test('visitors appear only while active or recently updated', () => {
+  const events = [ev('agent_start', { agent: 'explore' }), ev('agent_stop', { agent: 'explore' })];
+  const stopped = lastTime();
+  expect(build(events, new Date(stopped + 4 * 60_000)).agents.map((a) => a.id)).toContain('explore');
+  expect(build(events, new Date(stopped + 6 * 60_000)).agents.map((a) => a.id)).not.toContain('explore');
+  const working = [ev('agent_start', { agent: 'plan' })];
+  expect(build(working, new Date(lastTime() + 60 * 60_000)).agents.map((a) => a.id)).toContain('plan');
+  const blocked = [ev('status', { agent: 'guest', status: 'blocked', reason: 'x' })];
+  expect(build(blocked, new Date(lastTime() + 60 * 60_000)).agents.map((a) => a.id)).toContain('guest');
+  const waiting = [ev('status', { agent: 'guest', status: 'awaiting_approval' })];
+  expect(build(waiting, new Date(lastTime() + 60 * 60_000)).agents.map((a) => a.id)).toContain('guest');
+  const idle = [ev('status', { agent: 'guest', status: 'idle' })];
+  expect(build(idle, new Date(lastTime() + 60 * 60_000)).agents.map((a) => a.id)).not.toContain('guest');
+});
+
+test('agent_start resets progress, next step and reason', () => {
+  const s = build([ev('status', { agent: 'backend', status: 'working', task: 'T-1', progress: 80, nextStep: 'Ship' }), ev('agent_stop', { agent: 'backend' }), ev('agent_start', { agent: 'backend', task: 'T-2' })]);
+  expect(agent(s, 'backend')).toMatchObject({ status: 'working', currentTask: 'T-2', progress: 0, nextStep: null, reason: null });
+  const noTask = build([ev('status', { agent: 'backend', status: 'working', task: 'T-1' }), ev('agent_start', { agent: 'backend' })]);
+  expect(agent(noTask, 'backend').currentTask).toBeNull();
+});
