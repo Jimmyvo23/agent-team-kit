@@ -1,5 +1,4 @@
 import type { TeamError } from '../types';
-import { UNREADABLE } from '../api';
 
 export interface StatusOverlayProps {
   error: TeamError | null;
@@ -22,7 +21,7 @@ export function StatusOverlay({ error, offline }: StatusOverlayProps) {
         </div>
       ) : error && (
         <div className="status-card status-card-problem" role="alert">
-          <h2>{error === UNREADABLE ? 'The office cannot read the server' : 'The team file has a problem'}</h2>
+          <h2>{error.kind === 'team' ? 'The team file has a problem' : 'The office server had a problem'}</h2>
           <p>{error.error}</p>
           <p className="status-hint">{error.hint}</p>
         </div>

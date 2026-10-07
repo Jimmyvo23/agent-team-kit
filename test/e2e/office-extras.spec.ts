@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import path from 'node:path';
 import { test, expect, type Page } from '@playwright/test';
 import { appendEvent } from '../../lib/events.mjs';
@@ -46,6 +47,14 @@ test.describe('needs-you sign', () => {
     await expect(sign(page)).toHaveCount(0);
   });
 
+  test('screen readers hear the needs-you title through a live region', async ({ page }) => {
+    await open(page, 'busy');
+    const live = page.locator('.visually-hidden[aria-live="polite"]');
+    await expect(live).toHaveText('Jimmy, 2 things need you');
+    append({ type: 'status', agent: 'reviewer', status: 'working', task: 'T-003', progress: 50 });
+    await expect(live).toHaveText('Jimmy, 1 thing needs you', { timeout: 4000 });
+  });
+
   test('clicking it pins the approver clipboard with every item', async ({ page }) => {
     await open(page, 'busy');
     await sign(page).click();
@@ -63,8 +72,8 @@ test.describe('lobby task board', () => {
     await open(page, 'busy');
     const board = page.getByRole('region', { name: 'Task board' });
     await expect(board).toBeVisible();
-    for (const [name, count] of [['To do', 1], ['In progress', 1], ['In review', 1], ['Done', 5]] as const) {
-      await expect(board.getByRole('heading', { name: `${name} ${count}`, exact: true })).toBeVisible();
+    for (const name of ['To do, 1 task', 'In progress, 1 task', 'In review, 1 task', 'Done, 5 tasks']) {
+      await expect(board.getByRole('heading', { name, exact: true })).toBeVisible();
     }
     const done = board.getByRole('list', { name: 'Done' });
     await expect(done.getByRole('listitem')).toHaveCount(3);
@@ -72,6 +81,25 @@ test.describe('lobby task board', () => {
     await expect(more).toBeVisible();
     await more.click();
     await expect(done.getByRole('listitem')).toHaveCount(5);
+  });
+
+  test('the expand button keeps focus and flips aria-expanded', async ({ page }) => {
+    await open(page, 'busy');
+    const board = page.getByRole('region', { name: 'Task board' });
+    const done = board.getByRole('list', { name: 'Done' });
+    const toggle = board.getByRole('button', { name: 'and 2 more' });
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await toggle.focus();
+    await page.keyboard.press('Enter');
+    await expect(done.getByRole('listitem')).toHaveCount(5);
+    const focused = page.locator(':focus');
+    await expect(focused).toHaveText('Show fewer');
+    await expect(focused).toHaveAttribute('aria-expanded', 'true');
+    await expect(focused).toHaveAttribute('aria-controls', 'lobby-done');
+    await page.keyboard.press('Enter');
+    await expect(done.getByRole('listitem')).toHaveCount(3);
+    await expect(page.locator(':focus')).toHaveText('and 2 more');
+    await expect(page.locator(':focus')).toHaveAttribute('aria-expanded', 'false');
   });
 
   test('a ticket shows id, title, owner and progress when in progress', async ({ page }) => {
@@ -171,8 +199,24 @@ test.describe('list view', () => {
 
 test('a broken team file explains the problem', async ({ page }) => {
   await open(page, 'bad-team');
+  const alert = page.getByRole('alert');
+  await expect(alert.getByRole('heading', { name: 'The team file has a problem' })).toBeVisible();
+  await expect(alert).toContainText('JSON');
+  await expect(alert).toContainText('Fix .team/team.json and this page will reload.');
+});
+
+test('the theme survives the switch from the problem page to the office with storage blocked', async ({ page }) => {
+  await page.addInitScript(() => {
+    Object.defineProperty(window, 'localStorage', { get() { throw new Error('blocked'); } });
+  });
+  await open(page, 'bad-team');
   await expect(page.getByRole('heading', { name: 'The team file has a problem' })).toBeVisible();
-  await expect(page.getByText(/team\.json/).first()).toBeVisible();
+  await page.getByRole('radio', { name: 'Pastel' }).check();
+  fs.copyFileSync(path.join('test', 'fixtures', 'projects', 'busy', '.team', 'team.json'),
+    path.join(office!.projectDir, '.team', 'team.json'));
+  await expect(page.getByRole('heading', { name: 'CookNeighbour team' })).toBeVisible({ timeout: 4000 });
+  await expect(page.getByRole('radio', { name: 'Pastel' })).toBeChecked();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'pastel');
 });
 
 test('stopping the server shows the reconnecting overlay over the last state', async ({ page }) => {
@@ -182,6 +226,11 @@ test('stopping the server shows the reconnecting overlay over the last state', a
   office = undefined;
   await expect(page.getByText('Paused. Reconnecting…')).toBeVisible({ timeout: 7000 });
   await expect(page.getByRole('heading', { name: 'CookNeighbour team' })).toBeAttached();
+  // The toolbar stays usable above the overlay.
+  await page.getByRole('radio', { name: 'Night shift' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'night');
+  await page.getByRole('button', { name: 'List view' }).click();
+  await expect(page.getByRole('button', { name: 'Office view' })).toBeVisible();
 });
 
 test('re-activating a pinned room unpins it', async ({ page }) => {

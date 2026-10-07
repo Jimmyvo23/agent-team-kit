@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import type { AgentState } from '../types';
 import { Room } from './Room';
 import { PreviewCard } from './PreviewCard';
+import { orderRooms } from '../rooms';
 
 export interface BuildingProps {
   project: string;
@@ -32,18 +33,6 @@ function useColumns(): number {
     return () => mq.removeEventListener('change', update);
   }, []);
   return columns;
-}
-
-/**
- * Room order in the DOM: team.json order with the approver moved to the end of the top row,
- * so the top-right corner office comes in reading and focus order where it is drawn.
- */
-export function orderRooms(agents: AgentState[], columns: number): AgentState[] {
-  const approver = agents.find((a) => a.isApprover);
-  if (!approver) return agents;
-  const others = agents.filter((a) => a !== approver);
-  const at = Math.min(columns - 1, others.length);
-  return [...others.slice(0, at), approver, ...others.slice(at)];
 }
 
 /** The cutaway building: roof with the project name, then one room per agent. */

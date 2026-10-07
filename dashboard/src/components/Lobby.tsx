@@ -24,11 +24,13 @@ export function Lobby({ tasks, agents }: LobbyProps) {
       <div className="lobby-board">
         {TASK_COLUMNS.map(({ state, label }) => {
           const column = tasks.filter((t) => t.state === state);
-          const { shown, more } = open[state] ? { shown: column, more: 0 } : capColumn(column);
+          const capped = capColumn(column);
+          const shown = open[state] ? column : capped.shown;
           const listId = `lobby-${state}`;
           return (
             <div className="lobby-column" key={state}>
-              <h3>
+              {/* Read as "To do, 1 task". Hidden text inside would pick up a stray space in Chrome's name. */}
+              <h3 aria-label={`${label}, ${column.length} ${column.length === 1 ? 'task' : 'tasks'}`}>
                 {label} <span className="lobby-count">{column.length}</span>
               </h3>
               <ul id={listId} aria-label={label}>
@@ -45,16 +47,16 @@ export function Lobby({ tasks, agents }: LobbyProps) {
                   );
                 })}
               </ul>
-              {more > 0 && (
-                <button type="button" className="lobby-more" aria-controls={listId}
-                  onClick={() => setOpen((o) => ({ ...o, [state]: true }))}>
-                  {`and ${more} more`}
-                </button>
-              )}
-              {open[state] && column.length > LOBBY_MAX && (
-                <button type="button" className="lobby-more" aria-controls={listId}
-                  onClick={() => setOpen((o) => ({ ...o, [state]: false }))}>
-                  Show fewer
+              {column.length > LOBBY_MAX && (
+                // One button per column that stays mounted, so focus stays on it when it flips.
+                <button
+                  type="button"
+                  className="lobby-more"
+                  aria-controls={listId}
+                  aria-expanded={Boolean(open[state])}
+                  onClick={() => setOpen((o) => ({ ...o, [state]: !o[state] }))}
+                >
+                  {open[state] ? 'Show fewer' : `and ${capped.more} more`}
                 </button>
               )}
             </div>

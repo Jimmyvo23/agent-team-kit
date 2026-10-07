@@ -55,7 +55,7 @@ export function createOfficeServer({ projectDir, distDir, now = () => new Date()
   /** @param {http.ServerResponse} res */
   function handleTeam(res) {
     const loaded = loadTeam(teamFile);
-    if (!loaded.ok) return sendJson(res, 500, { error: loaded.error, hint: TEAM_HINT });
+    if (!loaded.ok) return sendJson(res, 500, { kind: 'team', error: loaded.error, hint: TEAM_HINT });
     try {
       const at = now();
       if (at.getTime() - lastRotation >= ROTATE_EVERY_MS) {
@@ -72,7 +72,7 @@ export function createOfficeServer({ projectDir, distDir, now = () => new Date()
       writeStatusFile(state);
       sendJson(res, 200, state);
     } catch (err) {
-      sendJson(res, 500, { error: `cannot read team activity: ${/** @type {Error} */ (err).message}`, hint: 'Check .team/events.jsonl and reload.' });
+      sendJson(res, 500, { kind: 'events', error: `cannot read team activity: ${/** @type {Error} */ (err).message}`, hint: 'Check .team/events.jsonl and reload.' });
     }
   }
 

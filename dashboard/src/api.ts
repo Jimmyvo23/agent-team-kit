@@ -13,8 +13,9 @@ export interface TeamStateResult {
 }
 
 function asTeamError(body: unknown, status: number): TeamError {
-  const b = (body ?? {}) as Partial<TeamError>;
+  const b = (body ?? {}) as Partial<Omit<TeamError, 'kind'>> & { kind?: unknown };
   return {
+    kind: b.kind === 'team' ? 'team' : 'server',
     error: typeof b.error === 'string' ? b.error : `The office server answered with status ${status}.`,
     hint: typeof b.hint === 'string' ? b.hint : 'Check the terminal that runs the office server.',
   };
@@ -29,6 +30,7 @@ function isTeamState(body: unknown): body is TeamState {
 }
 
 export const UNREADABLE: TeamError = {
+  kind: 'server',
   error: 'The office server sent an answer the page could not read.',
   hint: 'Restart the office server, then reload this page.',
 };
