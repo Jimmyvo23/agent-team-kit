@@ -19,7 +19,7 @@ The design is in `docs/superpowers/specs/`.
 - The Superpowers and frontend-design plugins, installed in Claude Code with `/plugin`
 - The target project must be a Git repository
 
-The installer checks all of this and stops with a plain message if something is missing.
+The installer checks Node, that the target is a Git repository, and the two plugins. It stops with a plain message if something is missing. It does not check that Git or Claude Code are installed.
 
 ## Install, update and uninstall
 
@@ -49,7 +49,7 @@ Uninstall:
 node install.mjs --target ../CookNeighbour --uninstall
 ```
 
-This removes the kit's files, hooks and marked blocks. It keeps `.team/team.json`, your handoffs in `.team/handoffs/`, `.claude/settings.json.bak` and the activity logs (`.team/events*.jsonl`). The logs stop being git-ignored after uninstall, so delete them or ignore them yourself before committing.
+This removes the kit's files, hooks and marked blocks. It keeps `.team/team.json`, your handoffs in `.team/handoffs/`, `.claude/settings.json.bak` and the activity logs (`.team/events*.jsonl`). The whole marked block is removed from `.gitignore`, so the logs, `agent-status.json` and `.superpowers/` stop being git-ignored. Delete them or ignore them yourself before committing.
 
 The installer refuses to run if `.team` or `.claude/settings.json` is a symlink, and it never writes or deletes through other symlinks. If `settings.json` is not valid JSON it stops without changing anything.
 
@@ -60,7 +60,7 @@ npm ci
 npm run office -- --project ../CookNeighbour
 ```
 
-Options: `--project <path>` (required, must contain `.team/`) and `--port <1-65535>` (default 4317). The first run builds the dashboard (`npm run build`), then it prints `Office is open at http://127.0.0.1:4317` and opens your browser. Press Ctrl+C to stop. If the port is busy, use `--port`.
+Relative paths are taken from the folder where you run the command. Options: `--project <path>` (required, must contain `.team/`) and `--port <1-65535>` (default 4317). The first run builds the dashboard (`npm run build`), then it prints `Office is open at http://127.0.0.1:4317` and opens your browser. Press Ctrl+C to stop. If the port is busy, use `--port`.
 
 The dashboard binds to `127.0.0.1` only, so nobody else on your network can see it. It reads `.team/events.jsonl` every 3 seconds and also writes `agent-status.json` at the project root (git-ignored).
 
@@ -102,8 +102,8 @@ Ids are matched ignoring case, so `Backend` and `backend` are the same desk.
 
 - **Hook data.** What the hooks receive was captured with Claude Code 2.1.290 (`docs/decisions/S-0-hook-input.md`). Other versions may differ. Parallel subagents were not tested; activity that cannot be tied to a known agent is shown as "team activity".
 - **Agents may skip status calls.** The status duty is an instruction, not something enforced. The hooks still record when each agent starts and stops and which files and commands it touches, so the office shows those facts either way.
-- **Hook text is not a redaction layer.** The log shows a short action such as "Editing app.ts" or "Running git status". It keeps only the program name and a second word when that word looks safe, but a command like `echo SECRET` would still show `echo SECRET`. Do not treat the log as private.
-- **Logs stay local.** `.team/events*.jsonl` and `agent-status.json` are git-ignored. The log is rotated when it passes about 5 MB.
+- **Hook text is not a redaction layer.** The log shows a short action such as "Editing app.ts" or "Running git status". It keeps only the program name and a second word when that word looks safe, but a command like `echo SECRET` would still show as `Running echo SECRET`. Do not treat the log as private.
+- **Logs stay local.** `.team/events*.jsonl` and `agent-status.json` are git-ignored. The log is rotated while the office is running, when it passes about 5 MB.
 - **One approval id per agent per Work Order.** The Planner records `WO-3-backend` and `WO-3-frontend` separately so each agent has its own decision.
 - **The Reviewer comments rather than approves.** With a single GitHub account an author cannot approve their own pull request, so Reviewer verdicts are pull request comments.
 

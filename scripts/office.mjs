@@ -132,7 +132,7 @@ function isMain() {
 
 if (isMain()) {
   const running = main(process.argv.slice(2), {
-    cwd: process.cwd(),
+    cwd: process.env.INIT_CWD ?? process.cwd(), // npm sets INIT_CWD to where the user ran it
     stdout: (s) => process.stdout.write(s),
     stderr: (s) => process.stderr.write(s),
     onReady: ({ server }) => {
