@@ -55,6 +55,21 @@ test('Bash action: env assignments skipped, flags and key=value args never inclu
   expect(act('  npm   test  ')).toBe('Running npm test');
   expect(act('ls')).toBe('Running ls');
 });
+test('Bash action: leading cd segments are skipped and never shown', () => {
+  const act = (command) => mapHookInput('tool', { tool_name: 'Bash', tool_input: { command } })?.action ?? null;
+  expect(act('cd "/Users/x/Claude projects/kit trial" && node .team/bin/team-status.mjs status --agent backend')).toBe('Running node .team/bin/team-status.mjs');
+  expect(act('cd /tmp; npm test')).toBe('Running npm test');
+  expect(act('cd "a b" && cd c && git status')).toBe('Running git status');
+  expect(act('cd "/Users/x/Claude projects"')).toBe('Running cd');
+  expect(act('FOO=1 cd x && make')).toBe('Running make');
+  expect(act('echo "a && b"')).toBe('Running echo');
+  expect(act('cd x\nnpm test')).toBe('Running npm test');
+  expect(act('cd x || ls')).toBe('Running ls');
+  expect(act("cd 'a;b' && git log")).toBe('Running git log');
+  expect(act('cd')).toBe('Running cd');
+  expect(act('; ; ls')).toBe('Running ls');
+  expect(act('"git" "status"')).toBe('Running git status');
+});
 test('actions are capped at 120 chars with an ellipsis', () => {
   const long = 'a'.repeat(200);
   const e = mapHookInput('tool', { tool_name: 'Edit', tool_input: { file_path: `/x/${long}.ts` } }).action;
