@@ -1,0 +1,48 @@
+/*
+ * Design tokens for the office. The default theme is Cozy day.
+ * Other themes override these tokens only, for example:
+ *   :root[data-theme="night"] { --sky: ...; --sky-2: ...; }
+ *   :root[data-theme="pastel"] { ... }
+ * Components never use raw colours; agent colours come from team.json at runtime (--wall).
+ */
+:root {
+  /* Palette (Global Constraints) */
+  --sky: #9fd3f0;
+  --sky-2: #c9ecff;
+  --frame: #2f6f73;
+  --ink: #2e2a4f;
+  --wood: #c98b4f;
+  --paper: #fffdf7;
+  --alert: #f25c54;
+  --approval: #ffc233;
+
+  /* Scene */
+  --grass: #e8f6d9;
+  --grass-2: #cfe8b4;
+  --cloud: #ffffff;
+  --on-frame: #ffffff;
+  --clip-metal: #9aa0a6;
+
+  /* Room lights */
+  --glow-working: rgba(255, 236, 150, 0.75);
+  --glow-blocked: rgba(242, 92, 84, 0.55);
+  --glow-waiting: rgba(255, 194, 51, 0.6);
+  --lights-dimmed: brightness(0.86) saturate(0.75);
+
+  /* State pills and plaques (tinted so ink text stays readable) */
+  --pill-working: #c8f2dc;
+  --pill-idle: #e6e6ee;
+  --pill-blocked: #ffd4d1;
+  --pill-waiting: var(--approval);
+  --pill-done: #c8f2dc;
+  --done: #3fae6a;
+
+  /* Surfaces */
+  --meter-track: #ffffff;
+  --hard-shadow: 4px 5px 0 var(--ink);
+
+  /* Type */
+  --font: 'Bricolage Grotesque', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+
+  color-scheme: light;
+}
