@@ -118,7 +118,7 @@ describe('install', () => {
     expect(read('.gitignore')).toBe('# agent-team-kit:start\n.team/events*.jsonl\nagent-status.json\n.superpowers/\n# agent-team-kit:end\n');
 
     const settings = JSON.parse(read('.claude/settings.json'));
-    expect(Object.keys(settings.hooks).sort()).toEqual(['PostToolUse', 'SubagentStart', 'SubagentStop']);
+    expect(Object.keys(settings.hooks).sort()).toEqual(['PostToolUse', 'Stop', 'SubagentStart', 'SubagentStop']);
     expect(settings.hooks.SubagentStart[0].hooks[0].command).toBe('node "$CLAUDE_PROJECT_DIR/.team/bin/hooks/record.mjs" agent-start');
     expect(exists('.claude/settings.json.bak')).toBe(false);
 
