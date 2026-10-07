@@ -1,0 +1,16 @@
+{"time":"2026-10-05T09:55:00.000Z","source":"cli","type":"task","id":"T-001","title":"Project skeleton","owner":"backend","state":"done"}
+{"time":"2026-10-05T09:56:00.000Z","source":"cli","type":"task","id":"T-002","title":"Page layout","owner":"frontend","state":"done"}
+{"time":"2026-10-05T09:57:00.000Z","source":"cli","type":"task","id":"T-003","title":"Auth and roles","owner":"backend","state":"done"}
+{"time":"2026-10-05T09:58:00.000Z","source":"cli","type":"task","id":"T-005","title":"Search filters","owner":"frontend","state":"done"}
+{"time":"2026-10-05T09:59:00.000Z","source":"cli","type":"task","id":"T-006","title":"Search page","owner":"backend","state":"done"}
+{"time":"2026-10-05T09:58:00.000Z","source":"cli","type":"status","agent":"tester","status":"idle"}
+{"time":"2026-10-05T09:59:00.000Z","source":"cli","type":"status","agent":"frontend","status":"working","task":"T-007","progress":20,"nextStep":"Build the booking form"}
+{"time":"2026-10-05T10:00:00.000Z","source":"cli","type":"status","agent":"frontend","status":"working","task":"T-007","progress":30,"nextStep":"Build the booking form"}
+{"time":"2026-10-05T10:01:00.000Z","source":"cli","type":"task","id":"T-004","title":"Booking pricing function","owner":"backend","state":"in_progress"}
+{"time":"2026-10-05T10:01:00.000Z","source":"cli","type":"task","id":"T-008","title":"Chat panel","owner":"frontend","state":"todo"}
+{"time":"2026-10-05T10:02:00.000Z","source":"cli","type":"task","id":"T-009","title":"Review chef profile page","owner":"reviewer","state":"in_review"}
+{"time":"2026-10-05T10:03:00.000Z","source":"cli","type":"handoff","from":"backend","to":"tester","task":"T-003"}
+{"time":"2026-10-05T10:04:00.000Z","source":"cli","type":"status","agent":"reviewer","status":"blocked","reason":"Checks failing"}
+{"time":"2026-10-05T10:05:00.000Z","source":"cli","type":"approval_requested","agent":"planner","id":"WO-3","summary":"Work Order for T-007 to T-009: booking form and chat","agents":["frontend"]}
+{"time":"2026-10-05T10:07:00.000Z","source":"cli","type":"status","agent":"planner","status":"working","task":"T-010","progress":10,"nextStep":"Draft the next Work Order"}
+{"time":"2026-10-05T10:08:00.000Z","source":"cli","type":"status","agent":"backend","status":"working","task":"T-004","progress":40,"nextStep":"Write the free-trial tests"}
