@@ -34,6 +34,64 @@ export function diffCounts(a, b) {
   return { added: y.length - common, removed: x.length - common };
 }
 
+/**
+ * Line edit script from `a` to `b` (LCS). A final newline does not count as an extra empty line.
+ * @param {string} a
+ * @param {string} b
+ * @returns {{ op: ' ' | '-' | '+', line: string }[]}
+ */
+function diffLines(a, b) {
+  const lines = (/** @type {string} */ t) => { const l = t.split('\n'); if (l.at(-1) === '') l.pop(); return l; };
+  const x = lines(a);
+  const y = lines(b);
+  // suffix[i][j] = LCS length of x[i..] and y[j..]
+  const suffix = Array.from({ length: x.length + 1 }, () => new Uint32Array(y.length + 1));
+  for (let i = x.length - 1; i >= 0; i--) {
+    for (let j = y.length - 1; j >= 0; j--) {
+      suffix[i][j] = x[i] === y[j] ? suffix[i + 1][j + 1] + 1 : Math.max(suffix[i + 1][j], suffix[i][j + 1]);
+    }
+  }
+  /** @type {{ op: ' ' | '-' | '+', line: string }[]} */
+  const ops = [];
+  let i = 0;
+  let j = 0;
+  while (i < x.length || j < y.length) {
+    if (i < x.length && j < y.length && x[i] === y[j]) { ops.push({ op: ' ', line: x[i] }); i++; j++; }
+    else if (j >= y.length || (i < x.length && suffix[i + 1][j] >= suffix[i][j + 1])) ops.push({ op: '-', line: x[i++] });
+    else ops.push({ op: '+', line: y[j++] });
+  }
+  return ops;
+}
+
+/**
+ * A short unified-style diff from `a` (the Kit's version) to `b` (your copy):
+ * `-` and `+` lines with up to `context` unchanged lines around them, `...` where
+ * unchanged lines are skipped, and at most `max` lines in all.
+ * @param {string} a
+ * @param {string} b
+ * @param {{ context?: number, max?: number }} [opts]
+ * @returns {string[]}
+ */
+export function formatDiff(a, b, { context = 2, max = 40 } = {}) {
+  const ops = diffLines(a, b);
+  const keep = new Array(ops.length).fill(false);
+  ops.forEach((o, k) => {
+    if (o.op === ' ') return;
+    for (let d = Math.max(0, k - context); d <= Math.min(ops.length - 1, k + context); d++) keep[d] = true;
+  });
+  /** @type {string[]} */
+  const out = [];
+  let last = -1;
+  ops.forEach((o, k) => {
+    if (!keep[k]) return;
+    if (last >= 0 && k > last + 1) out.push('...');
+    out.push(`${o.op}${o.line}`);
+    last = k;
+  });
+  if (out.length <= max) return out;
+  return [...out.slice(0, max - 1), `... ${out.length - (max - 1)} more lines`];
+}
+
 /** @param {string} answer */
 const isYes = (answer) => /^\s*y(es)?\s*$/i.test(answer);
 
@@ -104,6 +162,7 @@ export async function main(argv, io) {
       const current = fs.readFileSync(path.join(targetDir, ...c.path.split('/')), 'utf8');
       const { added, removed } = diffCounts(c.content, current);
       out(`${c.path} differs from the Kit's version: your copy has ${added} line${added === 1 ? '' : 's'} added, ${removed} removed.`);
+      for (const line of formatDiff(c.content, current)) out(`  ${line}`);
     } else {
       out(`${c.path} was changed after it was installed.`);
     }

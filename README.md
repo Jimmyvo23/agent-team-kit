@@ -34,7 +34,7 @@ It prints every change it will make and asks `Apply these changes? (y/n)`. Add `
 What it puts in the project:
 
 - `.claude/agents/` with the four subagent files
-- `.claude/settings.json` with four hooks added (subagent start and stop, file edits and commands, and the end of each main-session turn) (your existing settings and hooks are kept; the first copy of your file is saved as `settings.json.bak`)
+- `.claude/settings.json` with four hooks added, for subagent start and stop, file edits and commands, and the end of each main-session turn (your existing settings and hooks are kept; the first copy of your file is saved as `settings.json.bak`)
 - `.team/bin/` with `team-status.mjs`, the hook script and their helpers
 - `.team/planner.md`, `.team/work-order-template.md`, `.team/handoffs/handoff-template.md`
 - `.team/team.json` (the team and the approver; edit it to rename people)
@@ -57,7 +57,7 @@ Uninstall:
 node install.mjs --target ../CookNeighbour --uninstall
 ```
 
-This removes the kit's files, hooks and marked blocks. It keeps `.team/team.json`, your handoffs in `.team/handoffs/`, `.claude/settings.json.bak` and the activity logs (`.team/events*.jsonl`). The whole marked block is removed from `.gitignore`, so the logs, `agent-status.json` and `.superpowers/` stop being git-ignored. Delete them or ignore them yourself before committing.
+This removes the kit's files, hooks and marked blocks. It keeps `.team/team.json`, your handoffs in `.team/handoffs/`, `.claude/settings.json.bak` and the activity logs (`.team/events*.jsonl`). The whole marked block is removed from `.gitignore`, so the logs, `agent-status.json`, `.superpowers/` and `.claude/settings.json.bak` stop being git-ignored. Delete them or ignore them yourself before committing.
 
 The installer refuses to run if `.team` or `.claude/settings.json` is a symlink, and it never writes or deletes through other symlinks. If `settings.json` is not valid JSON it stops without changing anything.
 
