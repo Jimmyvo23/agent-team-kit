@@ -47,6 +47,7 @@ export function Room({ agent, selected, traySheets = 0, describedBy, plaque, onS
       <div className="room-window" />
       <div className="room-lamp" />
       <div className="room-glow" />
+      {agent.isVisitor && <div className="room-hot-desk">Hot desk</div>}
       {bubble && <div className="room-bubble">{bubble}</div>}
       <Figure status={agent.status} screen={!agent.isApprover} />
       {agent.isApprover && (
@@ -57,7 +58,7 @@ export function Room({ agent, selected, traySheets = 0, describedBy, plaque, onS
         </div>
       )}
       <div className="room-door" />
-      <div className="room-plaque">{plaque ?? STATE_LABELS[agent.status]}</div>
+      <div className={`room-plaque${plaque ? ' room-plaque-news' : ''}`}>{plaque ?? STATE_LABELS[agent.status]}</div>
       <div className="room-name">{agent.name}</div>
     </div>
   );

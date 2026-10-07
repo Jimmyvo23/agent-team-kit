@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import type { AgentLogEntry, AgentState, Approval } from '../types';
-import { ago, clockTime, NOTHING_ASSIGNED, staleWarning, STATE_LABELS } from '../labels';
+import type { AgentLogEntry, AgentState, NeedsYouItem } from '../types';
+import { ago, clockTime, needsYouLine, NOTHING_ASSIGNED, staleWarning, STATE_LABELS } from '../labels';
 
 export const CLIPBOARD_EVENTS = 20;
 
@@ -9,8 +9,10 @@ export interface ClipboardProps {
   agent: AgentState | null;
   /** That agent's log, oldest first (state.agentLogs[agent.id]). */
   events: AgentLogEntry[];
-  /** Pending approvals, listed on the approver's clipboard. */
-  pendingApprovals: Approval[];
+  /** Everything that needs the approver, listed on the approver's clipboard. */
+  needsYou: NeedsYouItem[];
+  /** All agents, for names in the needs-you list. */
+  agents: AgentState[];
   /** Server clock (state.updatedAt); every relative time is measured against it. */
   now: string;
   /** Extra content under the details (Task 14: everything that needs Jimmy). */
@@ -18,10 +20,10 @@ export interface ClipboardProps {
 }
 
 /** The clipboard on the right: details of the pinned agent. */
-export function Clipboard({ agent, events, pendingApprovals, now, children }: ClipboardProps) {
+export function Clipboard({ agent, events, needsYou, agents, now, children }: ClipboardProps) {
   return (
     <aside className="clipboard" aria-label="Details">
-      {agent ? <AgentDetails agent={agent} events={events} pendingApprovals={pendingApprovals} now={now} /> : (
+      {agent ? <AgentDetails agent={agent} events={events} needsYou={needsYou} agents={agents} now={now} /> : (
         <p className="clipboard-empty">Pick a room to pin what that person is doing here.</p>
       )}
       {children}
@@ -31,7 +33,7 @@ export function Clipboard({ agent, events, pendingApprovals, now, children }: Cl
 
 type AgentDetailsProps = Omit<ClipboardProps, 'children' | 'agent'> & { agent: AgentState };
 
-function AgentDetails({ agent: a, events, pendingApprovals, now }: AgentDetailsProps) {
+function AgentDetails({ agent: a, events, needsYou, agents, now }: AgentDetailsProps) {
   const stale = staleWarning(a, now);
   const recent = events.slice(-CLIPBOARD_EVENTS).reverse();
   const fill = a.status === 'blocked' ? 'var(--alert)' : a.color;
@@ -54,14 +56,15 @@ function AgentDetails({ agent: a, events, pendingApprovals, now }: AgentDetailsP
           </>
         )}
         {a.isApprover ? (
-          pendingApprovals.length > 0 && (
+          needsYou.length > 0 && (
             <>
-              <dt>Waiting for your decision</dt>
+              <dt>Needs you</dt>
               <dd>
                 <ul className="clipboard-approvals">
-                  {pendingApprovals.map((ap) => (
-                    <li key={ap.id}><strong>{ap.id}</strong> {ap.summary}</li>
-                  ))}
+                  {needsYou.map((item) => {
+                    const line = needsYouLine(item, agents);
+                    return <li key={`${item.kind}-${item.id}`}><strong>{line.title}</strong> {line.detail}</li>;
+                  })}
                 </ul>
               </dd>
             </>

@@ -1,0 +1,67 @@
+import { useState, type CSSProperties } from 'react';
+import type { AgentState, Task, TaskState } from '../types';
+import { agentName, TASK_COLUMNS } from '../labels';
+import { capColumn, LOBBY_MAX } from '../lobby';
+
+export interface LobbyProps {
+  tasks: Task[];
+  agents: AgentState[];
+}
+
+/** Progress shown on a ticket: the owner's progress while they are on this very task. */
+function ticketProgress(task: Task, agents: AgentState[]): number | null {
+  if (task.state !== 'in_progress') return null;
+  const owner = agents.find((a) => a.id === task.owner);
+  return owner && owner.currentTask === task.id ? owner.progress : null;
+}
+
+/** Ground floor of the building: the task board, four columns, at most 3 tickets each until expanded. */
+export function Lobby({ tasks, agents }: LobbyProps) {
+  const [open, setOpen] = useState<Partial<Record<TaskState, boolean>>>({});
+
+  return (
+    <section className="lobby" aria-label="Task board">
+      <div className="lobby-board">
+        {TASK_COLUMNS.map(({ state, label }) => {
+          const column = tasks.filter((t) => t.state === state);
+          const { shown, more } = open[state] ? { shown: column, more: 0 } : capColumn(column);
+          const listId = `lobby-${state}`;
+          return (
+            <div className="lobby-column" key={state}>
+              <h3>
+                {label} <span className="lobby-count">{column.length}</span>
+              </h3>
+              <ul id={listId} aria-label={label}>
+                {shown.map((t) => {
+                  const owner = agents.find((a) => a.id === t.owner);
+                  const progress = ticketProgress(t, agents);
+                  return (
+                    <li key={t.id} className="ticket" style={{ '--owner': owner?.color ?? 'var(--clip-metal)' } as CSSProperties}>
+                      <span className="ticket-title"><b>{t.id}</b> {t.title}</span>
+                      <span className="ticket-owner">
+                        {agentName(agents, t.owner)}{progress !== null && `, ${progress}%`}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+              {more > 0 && (
+                <button type="button" className="lobby-more" aria-controls={listId}
+                  onClick={() => setOpen((o) => ({ ...o, [state]: true }))}>
+                  {`and ${more} more`}
+                </button>
+              )}
+              {open[state] && column.length > LOBBY_MAX && (
+                <button type="button" className="lobby-more" aria-controls={listId}
+                  onClick={() => setOpen((o) => ({ ...o, [state]: false }))}>
+                  Show fewer
+                </button>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      <div className="lobby-floor" aria-hidden="true">Lobby</div>
+    </section>
+  );
+}
