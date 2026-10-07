@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import fs from 'node:fs';
+import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 import { createOfficeServer } from '../dashboard/server.mjs';
@@ -123,6 +124,38 @@ describe('GET /api/team', () => {
     expect(String(warn.mock.calls[0][0])).toMatch(/malformed JSON/);
   });
 
+  it('carries ids on every agent', async () => {
+    const projectDir = copyFixture('busy');
+    const base = await start({ projectDir, distDir: path.join(projectDir, 'nodist') });
+    const state = await (await fetch(`${base}/api/team`)).json();
+    expect(state.agents.map((a) => a.id)).toEqual(['planner', 'backend', 'frontend', 'tester', 'reviewer', 'jimmy']);
+  });
+
+  it('still serves state when rotation throws, warning once', async () => {
+    const projectDir = copyFixture('busy');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let t = Date.parse(FIXTURE_NOW);
+    const rotate = () => { throw new Error('disk full'); };
+    const base = await start({ projectDir, distDir: path.join(projectDir, 'nodist'), rotate, now: () => new Date(t) });
+    for (let i = 0; i < 3; i++) {
+      const res = await fetch(`${base}/api/team`);
+      expect(res.status).toBe(200);
+      t += 61_000;
+    }
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).toMatch(/rotation failed: disk full/);
+  });
+
+  it('warns once when agent-status.json cannot be written', async () => {
+    const projectDir = copyFixture('busy');
+    fs.mkdirSync(path.join(projectDir, 'agent-status.json')); // a directory blocks the rename
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const base = await start({ projectDir, distDir: path.join(projectDir, 'nodist') });
+    for (let i = 0; i < 3; i++) expect((await fetch(`${base}/api/team`)).status).toBe(200);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).toMatch(/agent-status\.json/);
+  });
+
   it('rotates at most once per 60 seconds of server time', async () => {
     const projectDir = copyFixture('busy');
     const log = path.join(projectDir, '.team', 'events.jsonl');
@@ -176,12 +209,10 @@ describe('static files', () => {
     const base = await start({ projectDir: copyFixture('empty'), distDir });
     // fetch normalises dots, so send raw requests
     const raw = (p) => new Promise((resolve, reject) => {
-      import('node:http').then(({ default: http }) => {
-        const u = new URL(base);
-        http.get({ host: u.hostname, port: u.port, path: p }, (res) => {
-          let body = ''; res.on('data', (c) => (body += c)); res.on('end', () => resolve({ status: res.statusCode, body }));
-        }).on('error', reject);
-      });
+      const u = new URL(base);
+      http.get({ host: u.hostname, port: u.port, path: p }, (res) => {
+        let body = ''; res.on('data', (c) => (body += c)); res.on('end', () => resolve({ status: res.statusCode, body }));
+      }).on('error', reject);
     });
     for (const p of ['/../package.json', '/%2e%2e%2fpackage.json', '/%2e%2e/package.json', '/..%2fpackage.json', '/a/%2e%2e/%2e%2e/package.json', '/%00']) {
       const res = await raw(p);

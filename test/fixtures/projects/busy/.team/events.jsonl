@@ -1,7 +1,7 @@
 {"time":"2026-10-05T09:55:00.000Z","source":"cli","type":"task","id":"T-001","title":"Project skeleton","owner":"backend","state":"done"}
-{"time":"2026-10-05T09:56:00.000Z","source":"cli","type":"task","id":"T-002","title":"Database schema","owner":"frontend","state":"done"}
+{"time":"2026-10-05T09:56:00.000Z","source":"cli","type":"task","id":"T-002","title":"Page layout","owner":"frontend","state":"done"}
 {"time":"2026-10-05T09:57:00.000Z","source":"cli","type":"task","id":"T-003","title":"Auth and roles","owner":"backend","state":"done"}
-{"time":"2026-10-05T09:58:00.000Z","source":"cli","type":"task","id":"T-005","title":"Seed data","owner":"frontend","state":"done"}
+{"time":"2026-10-05T09:58:00.000Z","source":"cli","type":"task","id":"T-005","title":"Search filters","owner":"frontend","state":"done"}
 {"time":"2026-10-05T09:59:00.000Z","source":"cli","type":"task","id":"T-006","title":"Search page","owner":"backend","state":"done"}
 {"time":"2026-10-05T09:58:00.000Z","source":"cli","type":"status","agent":"tester","status":"idle"}
 {"time":"2026-10-05T09:59:00.000Z","source":"cli","type":"status","agent":"frontend","status":"working","task":"T-007","progress":20,"nextStep":"Build the booking form"}

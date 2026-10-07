@@ -29,15 +29,22 @@ const TYPES = {
 };
 
 /**
- * @param {{ projectDir: string, distDir: string, now?: () => Date, maxBytes?: number }} options
+ * @param {{ projectDir: string, distDir: string, now?: () => Date, maxBytes?: number, rotate?: typeof rotateIfNeeded }} options
  * @returns {http.Server}
  */
-export function createOfficeServer({ projectDir, distDir, now = () => new Date(), maxBytes = DEFAULT_MAX_BYTES }) {
+export function createOfficeServer({ projectDir, distDir, now = () => new Date(), maxBytes = DEFAULT_MAX_BYTES, rotate = rotateIfNeeded }) {
   const root = path.resolve(distDir);
   const teamFile = path.join(projectDir, '.team', 'team.json');
   const log = logPath(projectDir);
   const warned = new Set();
   let lastRotation = -Infinity;
+
+  /** @param {string} text */
+  function warnOnce(text) {
+    if (warned.has(text)) return;
+    warned.add(text);
+    console.warn(`[agent-team-kit] ${text}`);
+  }
 
   /** @param {http.ServerResponse} res @param {number} status @param {unknown} body @param {Record<string,string>} [headers] */
   function sendJson(res, status, body, headers = {}) {
@@ -53,15 +60,14 @@ export function createOfficeServer({ projectDir, distDir, now = () => new Date()
       const at = now();
       if (at.getTime() - lastRotation >= ROTATE_EVERY_MS) {
         lastRotation = at.getTime();
-        rotateIfNeeded(log, loaded.team, at, maxBytes);
-      }
-      const { events, warnings } = readEvents(log);
-      for (const w of warnings) {
-        if (!warned.has(w)) {
-          warned.add(w);
-          console.warn(`[agent-team-kit] events.jsonl: ${w}`);
+        try {
+          rotate(log, loaded.team, at, maxBytes);
+        } catch (err) {
+          warnOnce(`log rotation failed: ${/** @type {Error} */ (err).message}`);
         }
       }
+      const { events, warnings } = readEvents(log);
+      for (const w of warnings) warnOnce(`events.jsonl: ${w}`);
       const state = buildState(events, loaded.team, at);
       writeStatusFile(state);
       sendJson(res, 200, state);
@@ -79,7 +85,7 @@ export function createOfficeServer({ projectDir, distDir, now = () => new Date()
       fs.renameSync(tmp, target);
     } catch (err) {
       fs.rmSync(tmp, { force: true });
-      console.warn(`[agent-team-kit] could not write agent-status.json: ${/** @type {Error} */ (err).message}`);
+      warnOnce(`could not write agent-status.json: ${/** @type {Error} */ (err).message}`);
     }
   }
 

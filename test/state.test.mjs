@@ -205,3 +205,9 @@ test('task and escalation events without agent are attributed to planner', () =>
   expect(s.agentLogs.planner).toHaveLength(2);
   expect(agent(s, 'planner').updatedAt).toBe(e.time);
 });
+
+test('every agent carries its normalized id, including approver and visitors', () => {
+  const s = build([ev('status', { agent: ' Guest ', status: 'working' })]);
+  expect(s.agents.map((a) => a.id)).toEqual(['planner', 'backend', 'frontend', 'tester', 'reviewer', 'jimmy', 'guest']);
+  expect(s.agents.at(-1).isVisitor).toBe(true);
+});
