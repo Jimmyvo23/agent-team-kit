@@ -21,6 +21,7 @@ const KIT_FILES = [
   '.team/bin/hooks/record.mjs',
   '.team/bin/lib/events.mjs',
   '.team/bin/lib/paths.mjs',
+  '.team/bin/lib/team.mjs',
   '.team/bin/team-status.mjs',
   '.team/handoffs/handoff-template.md',
   '.team/planner.md',
@@ -328,6 +329,16 @@ describe('installed scripts', () => {
     expect(r.stderr).toBe('');
     expect(r.status).toBe(0);
     expect(lastEvent()).toMatchObject({ type: 'status', agent: 'backend', status: 'working', source: 'cli' });
+  });
+
+  test('installed team-status warns about an id not in team.json and still writes', async () => {
+    await install();
+    const r = spawnSync(process.execPath, ['.team/bin/team-status.mjs', 'status', '--agent', 'bakend', '--status', 'working'], {
+      cwd: target, env: cleanEnv(), encoding: 'utf8',
+    });
+    expect(r.status).toBe(0);
+    expect(r.stderr).toMatch(/^Warning: "bakend"/);
+    expect(lastEvent()).toMatchObject({ agent: 'bakend' });
   });
 
   test('the shim works from a nested cwd and via CLAUDE_PROJECT_DIR', async () => {
