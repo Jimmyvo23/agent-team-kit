@@ -73,7 +73,8 @@ function describeBash(command) {
   if (!first) return 'Running cd';
   const next = first[1];
   const sub = next && !next.includes('=') && !next.startsWith('-') && !/\s/.test(next) ? ` ${next}` : '';
-  return `Running ${first[0]}${sub}`;
+  const cmd = first[0].includes('/') ? first[0].split('/').filter(Boolean).pop() || first[0] : first[0];
+  return `Running ${cmd}${sub}`;
 }
 
 /**

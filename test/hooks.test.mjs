@@ -70,6 +70,12 @@ test('Bash action: leading cd segments are skipped and never shown', () => {
   expect(act('; ; ls')).toBe('Running ls');
   expect(act('"git" "status"')).toBe('Running git status');
 });
+test('Bash action: a command word containing / shows only its basename', () => {
+  const act = (command) => mapHookInput('tool', { tool_name: 'Bash', tool_input: { command } })?.action ?? null;
+  expect(act('"/Users/x/Claude projects/bin/tool" run')).toBe('Running tool run');
+  expect(act('./node_modules/.bin/vitest run')).toBe('Running vitest run');
+  expect(act('node .team/bin/team-status.mjs')).toBe('Running node .team/bin/team-status.mjs');
+});
 test('actions are capped at 120 chars with an ellipsis', () => {
   const long = 'a'.repeat(200);
   const e = mapHookInput('tool', { tool_name: 'Edit', tool_input: { file_path: `/x/${long}.ts` } }).action;
